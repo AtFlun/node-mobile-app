@@ -34,7 +34,7 @@ const printHelp = () => {
   /**
    * 解析 --key value 参数,重复键覆盖为后者;
    * @param {string[]} args 子命令后的参数
-   * @returns {Object} 解析结果
+   * @returns {object} 解析结果
    */
   parseFlags = args => {
     const f = {};

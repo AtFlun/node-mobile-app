@@ -20,8 +20,10 @@
  *   App 使用该地址加载页面,无需在此配置;
  *   若 5 秒内未能识别,App 显示启动失败并可在页面展开详情查看原因;
  *   动态端口(listen(0))会自动获取系统分配的真实端口;
+ *
+ * >查看定义:@see {@link mobileAppConfig}
  */
-export default {
+const mobileAppConfig = {
   // ===== 必填 =====
   serverPath: './server.js',            // Node.js 启动脚本路径
 
@@ -63,6 +65,15 @@ export default {
     targetSdkVersion: 36,             // 目标 SDK
     compileSdkVersion: 37,            // 编译 SDK
     buildToolsVersion: '37.0.0',      // 构建工具版本
+    gradleDistributionUrl: null,      // 下载地址,示例:'https://mirrors.cloud.tencent.com/gradle/gradle-9.5.1-bin.zip'
+    // Maven 仓库,用于 buildscript 插件与 allprojects 依赖;按顺序尝试,失败回退下一个
+    // 未配置时使用内置默认:阿里云 public/google/gradle-plugin + 官方 google/mavenCentral
+    mavenRepositories: null,          // 示例见下,按需取消注释
+    // mavenRepositories: [
+    //   'https://maven.aliyun.com/repository/public',
+    //   'https://maven.aliyun.com/repository/google',
+    //   'https://maven.aliyun.com/repository/gradle-plugin',
+    // ],
     abiFilters: ['arm64-v8a'],        // 打包架构(真机用 arm64-v8a, 模拟器加 x86_64)
     icon: './build/icon.png',         // 应用图标(建议 512x512 PNG)
     usesCleartextTraffic: true,       // 是否允许明文流量(http)
@@ -141,7 +152,7 @@ export default {
     '.vscode/',
     '.idea/',
     '.vs/',
-    'node_modules/',                  // 如需保留请删除此行
+    'node_modules/',
     'sessions/',
     'users.json',
     '.env',
@@ -163,5 +174,7 @@ export default {
     'unrs-resolver': true,
     '@parcel/watcher': true,
     'bcrypt': true,
-  },
+  }
 };
+
+export default mobileAppConfig;

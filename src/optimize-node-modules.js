@@ -1,7 +1,7 @@
-import fs from 'fs';
-import path from 'path';
-import { createRequire } from 'module';
 import chalk from 'chalk';
+import fs from 'fs';
+import { createRequire } from 'module';
+import path from 'path';
 
 const require = createRequire(import.meta.url), subpath = (...parts) => './' + path.posix.join(...parts),
     BUNDLED_DIR = 'bundled', NM_DIR = 'node_modules', PKG_JSON = 'package.json',
@@ -491,8 +491,9 @@ const require = createRequire(import.meta.url), subpath = (...parts) => './' + p
                     const platBad = plat && !myPlat.includes(plat), archBad = plat && arch && !myArch.includes(arch);
                     if (platBad || archBad) {
                         if (process.env.OPTIMIZE_DEBUG) {
-                            const rel = toPosix(path.relative(nmDir, full));
-                            console.log(chalk.gray(`  ✓ ${rel} (${platBad ? '平台不符: ' + plat : '架构不符: ' + arch})`));
+                            const rel = toPosix(path.relative(nmDir, full)),
+                                why = platBad ? '平台不符: ' + plat : '架构不符: ' + arch;
+                            console.log(chalk.gray(`  ✓ ${rel} (${why})`));
                         }
                         delFile(full);
                     }

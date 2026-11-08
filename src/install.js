@@ -6,15 +6,20 @@ import { createRequire } from 'module';
 import chalk from 'chalk';
 import { resolveSdkPath } from './config.js';
 import { createHash } from 'crypto';
-const
+
+const ABI_MAP = {
+  'armeabi-v7a': { arch: 'arm', prefix: 'armv7a-linux-androideabi' },
+  'arm64-v8a': { arch: 'arm64', prefix: 'aarch64-linux-android' },
+  'x86_64': { arch: 'x64', prefix: 'x86_64-linux-android' }
+},
   /**
    * 内部:从 libnode 的 node_version.h 读取运行时 Node 主版本号
    * 读不到直接报错退出(说明 libnode 目录不完整,继续执行必失败)
    */
   resolveRuntimeMajor = (userProjectDir, targetPlatform) => {
     const sub = targetPlatform === 'ios' ? 'ios' : 'android',
-      header = path.join(userProjectDir, 'node_modules', '@flun', 'nodejs-mobile-react-native',
-        sub, 'libnode', 'include', 'node', 'node_version.h');
+      header = path.join(userProjectDir, 'node_modules', '@flun', 'nodejs-mobile-react-native', sub,
+        'libnode', 'include', 'node', 'node_version.h');
     if (!fs.existsSync(header)) {
       console.error(chalk.red('  [错误] 未找到 node_version.h: ' + header));
       console.error(chalk.red('         说明 libnode 目录不完整,请重新安装依赖;')), process.exit(1);
@@ -37,8 +42,7 @@ const
     } catch { return false; }
 
     const nodeModulesDir = path.join(userProjectDir, 'node_modules');
-    for (const name of Object.keys(deps))
-      if (fs.existsSync(path.join(nodeModulesDir, name, 'binding.gyp'))) return true;
+    for (const name of Object.keys(deps)) if (fs.existsSync(path.join(nodeModulesDir, name, 'binding.gyp'))) return true;
     return false;
   },
   /**
@@ -49,11 +53,7 @@ const
     for (const c of candidates) if (fs.existsSync(path.join(c, 'android', 'build.gradle'))) return c;
     return null;
   },
-  ABI_MAP = {
-    'armeabi-v7a': { arch: 'arm', prefix: 'armv7a-linux-androideabi' },
-    'arm64-v8a': { arch: 'arm64', prefix: 'aarch64-linux-android' },
-    'x86_64': { arch: 'x64', prefix: 'x86_64-linux-android' }
-  },
+
   resolveNdkVersion = buildDir => {
     const gradle = path.join(buildDir, 'android', 'build.gradle');
     if (!fs.existsSync(gradle))
@@ -77,10 +77,11 @@ const
       if (entry.startsWith('@')) {
         for (const sub of fs.readdirSync(full)) {
           const pkgDir = path.join(full, sub);
-          if (fs.statSync(pkgDir).isDirectory()
-              && fs.existsSync(path.join(pkgDir, 'binding.gyp'))) result.push(entry + '/' + sub);
+          if (fs.statSync(pkgDir).isDirectory() && fs.existsSync(path.join(pkgDir, 'binding.gyp')))
+            result.push(entry + '/' + sub);
         }
-      } else if (fs.existsSync(path.join(full, 'binding.gyp'))) result.push(entry);
+      }
+      else if (fs.existsSync(path.join(full, 'binding.gyp'))) result.push(entry);
     }
     return result;
   },
@@ -93,16 +94,14 @@ const
       console.error(chalk.red('  [错误] 未找到 NDK ' + ndkVersion + ': ' + ndkPath)), process.exit(1);
     const pluginDir = findPluginDir(userProjectDir);
     if (!pluginDir) console.error(chalk.red('  [错误] 未找到 @flun/nodejs-mobile-react-native 插件')), process.exit(1);
-    const libnodeDir = path.join(pluginDir, 'android', 'libnode'),
-      gypPath = createRequire(path.join(pluginDir, 'package.json')).resolve('@flun/nodejs-mobile-gyp/bin/node-gyp.js'),
-      hostTag = { win32: 'windows-x86_64', darwin: 'darwin-x86_64', linux: 'linux-x86_64' }[process.platform],
-      hostOs = process.platform === 'darwin' ? 'mac' : 'linux',
-      toolSuffix = process.platform === 'win32' ? '.cmd' : '',
-      binSuffix = process.platform === 'win32' ? '.exe' : '';
+    const gypPath = createRequire(path.join(pluginDir, 'package.json')).resolve('@flun/nodejs-mobile-gyp/bin/node-gyp.js'),
+      libnodeDir = path.join(pluginDir, 'android', 'libnode'), hostOs = process.platform === 'darwin' ? 'mac' : 'linux',
+      toolSuffix = process.platform === 'win32' ? '.cmd' : '', binSuffix = process.platform === 'win32' ? '.exe' : '',
+      hostTag = { win32: 'windows-x86_64', darwin: 'darwin-x86_64', linux: 'linux-x86_64' }[process.platform];
     if (!hostTag) console.error(chalk.red('  [错误] 不支持的操作系统: ' + process.platform)), process.exit(1);
     const toolchain = path.join(ndkPath, 'toolchains', 'llvm', 'prebuilt', hostTag),
-      assetsDir = path.dirname(targetDir), gradleProjectDir = path.join(buildDir, 'android');
-    const patchScript = path.join(pluginDir, 'scripts', 'patch-package.js');
+      assetsDir = path.dirname(targetDir), gradleProjectDir = path.join(buildDir, 'android'),
+      patchScript = path.join(pluginDir, 'scripts', 'patch-package.js');
     if (fs.existsSync(patchScript)) run(process.execPath, [patchScript, path.join(targetDir, 'node_modules')],
       { cwd: targetDir, inherit: true });
     for (const abi of abiFilters) {
@@ -132,11 +131,10 @@ const
       }
       catch (e) { console.error(chalk.red('  [错误] 原生模块编译失败 (' + abi + '): ' + e.message)), process.exit(1); }
       const missing = findNativePackages(targetDir).filter(name => {
-        const pkgDir = path.join(targetDir, 'node_modules', name),
+        const pkgDir = path.join(targetDir, 'node_modules', name), releaseDir = path.join(pkgDir, 'build', 'Release'),
+          hasBuild = fs.existsSync(releaseDir) && fs.readdirSync(releaseDir).some(f => f.endsWith('.node')),
           prebuildDir = path.join(pkgDir, 'prebuilds', 'android-' + map.arch),
-          hasPrebuild = fs.existsSync(prebuildDir) && fs.readdirSync(prebuildDir).some(f => f.endsWith('.node')),
-          releaseDir = path.join(pkgDir, 'build', 'Release'),
-          hasBuild = fs.existsSync(releaseDir) && fs.readdirSync(releaseDir).some(f => f.endsWith('.node'));
+          hasPrebuild = fs.existsSync(prebuildDir) && fs.readdirSync(prebuildDir).some(f => f.endsWith('.node'));
         return !hasPrebuild && !hasBuild;
       });
       if (missing.length > 0) {
@@ -177,152 +175,168 @@ const
     c = c.substring(0, idx) + injected + c.substring(idx);
     fs.writeFileSync(file, c, 'utf-8');
     console.log(chalk.green('    ✓ 已应用 iOS WebView SSL 补丁(允许 localhost 自签证书)'));
-  },
-  /**
-   * 装用户项目的生产依赖到 <buildDir>/nodejs-assets/nodejs-project/
-   * 只装 dependencies,不装 devDependencies
-   * 依赖 + 环境未变化且上次构建完成时跳过,否则按需重装 / 仅优化
-   * 快照记录在 buildDir/.deps-snapshot.json(与桌面版一致)
-   */
-  installUserDeps = async (targetDir, userProjectDir, config, buildDir, targetPlatform) => {
-    const assetsDir = path.dirname(targetDir), bnmFile = path.join(assetsDir, 'BUILD_NATIVE_MODULES.txt'),
-      nodeModulesDir = path.join(targetDir, 'node_modules'), snapshotPath = path.join(buildDir, '.deps-snapshot.json'),
-      forceRebuild = process.env.NODE_MOBILE_FORCE_REBUILD === '1', hasNative = hasNativeModules(userProjectDir),
-      optimizeCfg = config.optimize || {}, thisOptimize = optimizeCfg.enabled !== false,
-      abiFilters = [...(config.android.abiFilters || [])].sort(),
-      runtimeMajor = resolveRuntimeMajor(userProjectDir, targetPlatform);
+  };
 
-    fs.writeFileSync(bnmFile, hasNative ? '1' : '0');
-    if (hasNative) console.log(chalk.gray('  ℹ️  检测到原生模块(binding.gyp)'));
+/**
+ * 装用户项目的生产依赖到 <buildDir>/nodejs-assets/nodejs-project/
+ * 只装 dependencies,不装 devDependencies
+ * 依赖 + 环境未变化且上次构建完成时跳过,否则按需重装 / 仅优化
+ * 快照记录在 buildDir/.deps-snapshot.json(与桌面版一致)
+ * >查看定义:@see {@link installUserDeps}
+ * @param {string} targetDir nodejs-project 目录
+ * @param {string} userProjectDir 用户项目目录
+ * @param {object} config 用户配置
+ * @param {string} buildDir 构建目录
+ * @param {string} targetPlatform 目标平台('android' 或 'ios')
+ * @returns {Promise<void>}
+ */
+const installUserDeps = async (targetDir, userProjectDir, config, buildDir, targetPlatform) => {
+  const assetsDir = path.dirname(targetDir), bnmFile = path.join(assetsDir, 'BUILD_NATIVE_MODULES.txt'),
+    nodeModulesDir = path.join(targetDir, 'node_modules'), snapshotPath = path.join(buildDir, '.deps-snapshot.json'),
+    forceRebuild = process.env.NODE_MOBILE_FORCE_REBUILD === '1', hasNative = hasNativeModules(userProjectDir),
+    abiFilters = [...(config.android.abiFilters || [])].sort(), optimizeCfg = config.optimize || {},
+    thisOptimize = optimizeCfg.enabled !== false, runtimeMajor = resolveRuntimeMajor(userProjectDir, targetPlatform);
 
-    const pkg = JSON.parse(fs.readFileSync(path.join(targetDir, 'package.json'), 'utf-8')), deps = pkg.dependencies || {},
-      sortedDeps = Object.keys(deps).sort().reduce((acc, k) => { acc[k] = deps[k]; return acc; }, {}),
-      installerHash = createHash('sha256').update(fs.readFileSync(new URL(import.meta.url), 'utf-8'))
-          .digest('hex').slice(0, 16),
-      snapshotData = { deps: sortedDeps, type: pkg.type || '', hasNative, forceRebuild };
+  fs.writeFileSync(bnmFile, hasNative ? '1' : '0');
+  if (hasNative) console.log(chalk.gray('  ℹ️  检测到原生模块(binding.gyp)'));
 
-    let shouldInstall = true, shouldOptimize = thisOptimize, reasons = [];
-    if (fs.existsSync(snapshotPath)) {
-      const old = JSON.parse(fs.readFileSync(snapshotPath, 'utf-8')), verifiedOk = old.verified === true,
-        depsSame = JSON.stringify({
-          deps: old.deps, type: old.type, hasNative: old.hasNative, forceRebuild: old.forceRebuild
-        }) === JSON.stringify(snapshotData),
-        envSame = old.platform === targetPlatform && JSON.stringify(old.abiFilters) === JSON.stringify(abiFilters) &&
-          old.runtimeMajor === runtimeMajor,
-        lastOptimized = old.optimized !== false, selfHashSame = old.optimizeHash === SELF_HASH,
-        installerSame = old.installerHash === installerHash, nmExists = fs.existsSync(nodeModulesDir);
-      if (!depsSame) reasons.push('依赖清单已变化');
-      if (!verifiedOk) reasons.push('上次构建未完成');
-      if (!envSame) reasons.push('运行环境已变化');
-      if (!nmExists) reasons.push('缓存目录缺失');
-      if (lastOptimized && !thisOptimize) reasons.push('优化已由开启转为关闭');
-      if (thisOptimize && !selfHashSame && lastOptimized) reasons.push('优化程序已更新');
-      if (!installerSame) reasons.push('安装器已更新');
-      if (reasons.length > 0) {
-        shouldInstall = true, shouldOptimize = thisOptimize;
-        console.log(chalk.gray('  ℹ️  ' + (thisOptimize ? '重新安装依赖+优化' : '重新安装依赖')
-            + '(原因: ' + reasons.join(', ') + ')'));
-      }
-      else if (thisOptimize && !lastOptimized)
-        shouldInstall = false, shouldOptimize = true, console.log(chalk.gray('  ℹ️  依赖与环境未变化,仅需优化'));
-      else {
-        shouldInstall = false, shouldOptimize = false, console.log(chalk.gray('    ✓ 依赖与环境未变化,跳过安装与优化'));
-        await clearVerified(buildDir);
-        return;
-      }
-    } else
-      console.log(chalk.gray('  ℹ️  ' + (thisOptimize ? '重新安装依赖+优化' : '重新安装依赖') + '(原因: 缓存快照缺失)'));
+  const pkg = JSON.parse(fs.readFileSync(path.join(targetDir, 'package.json'), 'utf-8')), deps = pkg.dependencies || {},
+    sortedDeps = Object.keys(deps).sort().reduce((acc, k) => { acc[k] = deps[k]; return acc; }, {}),
+    installerHash = createHash('sha256').update(fs.readFileSync(new URL(import.meta.url), 'utf-8'))
+      .digest('hex').slice(0, 16), snapshotData = { deps: sortedDeps, type: pkg.type || '', hasNative, forceRebuild };
 
-    if (shouldInstall) {
-      if (fs.existsSync(nodeModulesDir))
-        console.log(chalk.cyan('  清理旧 node_modules...')), fs.rmSync(nodeModulesDir, { recursive: true, force: true });
-
-      try { fs.rmSync(snapshotPath, { force: true }); } catch { }
-      const env = { ...process.env };
-      if (hasNative) env.NODEJS_MOBILE_BUILD_NATIVE_MODULES = '1';
-      console.log(chalk.cyan('  安装用户生产依赖(nodejs-assets/nodejs-project)...'));
-      run('npm', ['install', '--omit=dev', '--no-audit', '--no-fund'], { cwd: targetDir, env, quiet: true });
-      const snap = {
-        ...snapshotData, platform: targetPlatform, abiFilters, runtimeMajor,
-        optimizeHash: SELF_HASH, installerHash, optimized: false, verified: false
-      };
-      fs.writeFileSync(snapshotPath, JSON.stringify(snap, null, 2));
-      console.log(chalk.green('    ✓ 用户依赖安装完成'));
+  let shouldInstall = true, shouldOptimize = thisOptimize, reasons = [];
+  if (fs.existsSync(snapshotPath)) {
+    const old = JSON.parse(fs.readFileSync(snapshotPath, 'utf-8')), verifiedOk = old.verified === true,
+      depsSame = JSON.stringify({
+        deps: old.deps, type: old.type, hasNative: old.hasNative, forceRebuild: old.forceRebuild
+      }) === JSON.stringify(snapshotData),
+      envSame = old.platform === targetPlatform && JSON.stringify(old.abiFilters) === JSON.stringify(abiFilters) &&
+        old.runtimeMajor === runtimeMajor,
+      lastOptimized = old.optimized !== false, selfHashSame = old.optimizeHash === SELF_HASH,
+      installerSame = old.installerHash === installerHash, nmExists = fs.existsSync(nodeModulesDir);
+    if (!depsSame) reasons.push('依赖清单已变化');
+    if (!verifiedOk) reasons.push('上次构建未完成');
+    if (!envSame) reasons.push('运行环境已变化');
+    if (!nmExists) reasons.push('缓存目录缺失');
+    if (lastOptimized && !thisOptimize) reasons.push('优化已由开启转为关闭');
+    if (thisOptimize && !selfHashSame && lastOptimized) reasons.push('优化程序已更新');
+    if (!installerSame) reasons.push('安装器已更新');
+    if (reasons.length > 0) {
+      shouldInstall = true, shouldOptimize = thisOptimize;
+      console.log(chalk.gray('  ℹ️  ' + (thisOptimize ? '重新安装依赖+优化' : '重新安装依赖')
+        + '(原因: ' + reasons.join(', ') + ')'));
     }
-
-    if (hasNative && targetPlatform === 'android' && shouldInstall)
-      compileNativeModules(targetDir, userProjectDir, config, buildDir, abiFilters);
-    if (shouldOptimize) {
-      console.log(chalk.cyan('  [信息] 正在执行优化...'));
-      try {
-        await optimizeNodeModules(targetDir, {
-          targetPlatform, abiFilters, runtimeMajor, exclude: optimizeCfg.exclude || [], snapshotDir: buildDir
-        });
-      } catch (err) {
-        console.error(chalk.red('  [错误] node_modules 优化失败:' + err.message));
-        console.error(chalk.red('  [提示] 可在 mobileAppConfig.js 中设置 optimize: { enabled: false } 关闭优化,'));
-        console.error(chalk.red('         或用 optimize: { exclude: ["包名"] } 排除问题包;')), process.exit(1);
-      }
+    else if (thisOptimize && !lastOptimized)
+      shouldInstall = false, shouldOptimize = true, console.log(chalk.gray('  ℹ️  依赖与环境未变化,仅需优化'));
+    else {
+      shouldInstall = false, shouldOptimize = false, console.log(chalk.gray('    ✓ 依赖与环境未变化,跳过安装与优化'));
+      await clearVerified(buildDir);
+      return;
     }
-  },
-  /**
-   * 修改 @flun/nodejs-mobile-react-native 插件 build.gradle 的 abiFilters
-   */
-  patchNodejsMobilePlugin = (userProjectDir, config) => {
-    const pluginDir = findPluginDir(userProjectDir);
-    if (!pluginDir) return console.warn(chalk.yellow('  ⚠️  未找到 @flun/nodejs-mobile-react-native 插件,跳过 patch'));
+  }
+  else console.log(chalk.gray('  ℹ️  ' + (thisOptimize ? '重新安装依赖+优化' : '重新安装依赖') + '(原因: 缓存快照缺失)'));
 
-    const file = path.join(pluginDir, 'android', 'build.gradle'),
-      abiList = config.android.abiFilters.map((x) => `"${x}"`).join(', ');
+  if (shouldInstall) {
+    if (fs.existsSync(nodeModulesDir))
+      console.log(chalk.cyan('  清理旧 node_modules...')), fs.rmSync(nodeModulesDir, { recursive: true, force: true });
 
+    try { fs.rmSync(snapshotPath, { force: true }); } catch { }
+    const env = { ...process.env };
+    if (hasNative) env.NODEJS_MOBILE_BUILD_NATIVE_MODULES = '1';
+    console.log(chalk.cyan('  安装用户生产依赖(nodejs-assets/nodejs-project)...'));
+    run('npm', ['install', '--omit=dev', '--no-audit', '--no-fund'], { cwd: targetDir, env, quiet: true });
+    const snap = {
+      ...snapshotData, platform: targetPlatform, abiFilters, runtimeMajor,
+      optimizeHash: SELF_HASH, installerHash, optimized: false, verified: false
+    };
+    fs.writeFileSync(snapshotPath, JSON.stringify(snap, null, 2));
+    console.log(chalk.green('    ✓ 用户依赖安装完成'));
+  }
+
+  if (hasNative && targetPlatform === 'android' && shouldInstall)
+    compileNativeModules(targetDir, userProjectDir, config, buildDir, abiFilters);
+  if (shouldOptimize) {
+    console.log(chalk.cyan('  [信息] 正在执行优化...'));
+    try {
+      await optimizeNodeModules(targetDir, {
+        targetPlatform, abiFilters, runtimeMajor, exclude: optimizeCfg.exclude || [], snapshotDir: buildDir
+      });
+    } catch (err) {
+      console.error(chalk.red('  [错误] node_modules 优化失败:' + err.message));
+      console.error(chalk.red('  [提示] 可在 mobileAppConfig.js 中设置 optimize: { enabled: false } 关闭优化,'));
+      console.error(chalk.red('         或用 optimize: { exclude: ["包名"] } 排除问题包;')), process.exit(1);
+    }
+  }
+};
+
+/**
+ * 修改 @flun/nodejs-mobile-react-native 插件 build.gradle 的 abiFilters
+ * >查看定义:@see {@link patchNodejsMobilePlugin}
+ * @param {string} userProjectDir 用户项目目录
+ * @param {object} config 用户配置
+ * @returns {void}
+ */
+const patchNodejsMobilePlugin = (userProjectDir, config) => {
+  const pluginDir = findPluginDir(userProjectDir);
+  if (!pluginDir) return console.warn(chalk.yellow('  ⚠️  未找到 @flun/nodejs-mobile-react-native 插件,跳过 patch'));
+
+  const file = path.join(pluginDir, 'android', 'build.gradle'),
+    abiList = config.android.abiFilters.map((x) => `"${x}"`).join(', ');
+
+  let c = fs.readFileSync(file, 'utf-8');
+  const before = c;
+  c = c.replace(/abiFilters\s*=\s*\[[^\]]*\]/, `abiFilters = [${abiList}]`);
+
+  if (c !== before)
+    fs.writeFileSync(file, c, 'utf-8'), console.log(chalk.green(`  ✓ 已设置插件 abiFilters = [${abiList}]`));
+};
+
+/**
+ * 让 react-native-webview 对 localhost 自签名证书放行
+ * Android: patch RNCWebViewClient.java
+ * iOS:     patch RNCWebViewImpl.m
+ * 仅在 config.webview.allowSelfSignedCert === true 时应用
+ * 每次 test/build 都检查(npm 重装 webview 后会覆盖补丁)
+ * >查看定义:@see {@link patchWebViewSsl}
+ * @param {string} userProjectDir 用户项目目录
+ * @param {object} config 用户配置
+ * @returns {void}
+ */
+const patchWebViewSsl = (userProjectDir, config) => {
+  if (!config.webview || config.webview.allowSelfSignedCert !== true) return;
+
+  const file = path.join(
+    userProjectDir, 'node_modules', 'react-native-webview', 'android', 'src', 'main', 'java', 'com',
+    'reactnativecommunity', 'webview', 'RNCWebViewClient.java'
+  );
+
+  if (fs.existsSync(file)) {
     let c = fs.readFileSync(file, 'utf-8');
-    const before = c;
-    c = c.replace(/abiFilters\s*=\s*\[[^\]]*\]/, `abiFilters = [${abiList}]`);
-
-    if (c !== before) fs.writeFileSync(file, c, 'utf-8'),
-      console.log(chalk.green(`  ✓ 已设置插件 abiFilters = [${abiList}]`));
-  },
-  /**
-   * 让 react-native-webview 对 localhost 自签名证书放行
-   * Android: patch RNCWebViewClient.java
-   * iOS:     patch RNCWebViewImpl.m
-   * 仅在 config.webview.allowSelfSignedCert === true 时应用
-   * 每次 test/build 都检查(npm 重装 webview 后会覆盖补丁)
-   */
-  patchWebViewSsl = (userProjectDir, config) => {
-    if (!config.webview || config.webview.allowSelfSignedCert !== true) return;
-
-    const file = path.join(
-      userProjectDir, 'node_modules', 'react-native-webview', 'android', 'src', 'main', 'java', 'com',
-      'reactnativecommunity', 'webview', 'RNCWebViewClient.java'
-    );
-
-    if (fs.existsSync(file)) {
-      let c = fs.readFileSync(file, 'utf-8');
-      if (c.includes('LOCALHOST_SSL_BYPASS')) console.log(chalk.green('    ✓ Android WebView SSL 补丁已应用'));
-      else {
-        const old = 'handler.cancel();', methodIndex = c.indexOf('onReceivedSslError');
-        if (methodIndex !== -1) {
-          const cancelIndex = c.indexOf(old, methodIndex);
-          if (cancelIndex !== -1) {
-            const newCode = [
-              '// LOCALHOST_SSL_BYPASS: 对 localhost/127.0.0.1 放行自签名证书(仅本地测试用)',
-              '        if (failingUrl != null',
-              '            && (failingUrl.startsWith("https://127.0.0.1") || ' +
-              '            failingUrl.startsWith("https://localhost"))) {',
-              '            handler.proceed();',
-              '            return;',
-              '        }',
-              '        handler.cancel();',
-            ].join('\n');
-            c = c.substring(0, cancelIndex) + newCode + c.substring(cancelIndex + old.length);
-            fs.writeFileSync(file, c, 'utf-8');
-            console.log(chalk.green('    ✓ 已应用 Android WebView SSL 补丁(允许 localhost 自签证书)'));
-          }
+    if (c.includes('LOCALHOST_SSL_BYPASS')) console.log(chalk.green('    ✓ Android WebView SSL 补丁已应用'));
+    else {
+      const old = 'handler.cancel();', methodIndex = c.indexOf('onReceivedSslError');
+      if (methodIndex !== -1) {
+        const cancelIndex = c.indexOf(old, methodIndex);
+        if (cancelIndex !== -1) {
+          const newCode = [
+            '// LOCALHOST_SSL_BYPASS: 对 localhost/127.0.0.1 放行自签名证书(仅本地测试用)',
+            '        if (failingUrl != null',
+            '            && (failingUrl.startsWith("https://127.0.0.1") || ' +
+            '            failingUrl.startsWith("https://localhost"))) {',
+            '            handler.proceed();',
+            '            return;',
+            '        }',
+            '        handler.cancel();',
+          ].join('\n');
+          c = c.substring(0, cancelIndex) + newCode + c.substring(cancelIndex + old.length);
+          fs.writeFileSync(file, c, 'utf-8');
+          console.log(chalk.green('    ✓ 已应用 Android WebView SSL 补丁(允许 localhost 自签证书)'));
         }
       }
     }
-    patchWebViewSslIos(userProjectDir); // iOS 分支
-  };
+  }
+  patchWebViewSslIos(userProjectDir); // iOS 分支
+};
 
 export { installUserDeps, patchNodejsMobilePlugin, patchWebViewSsl };

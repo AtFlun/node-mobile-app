@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { ensureDir, removeDir } from './utils.js';
 import chalk from 'chalk';
 
+
 const FINGERPRINT_FILE = '.build-fingerprint.json',
   hashUserDeps = userProjectDir => {
     const h = crypto.createHash('sha256'), pkgPath = path.join(userProjectDir, 'package.json');
@@ -15,8 +16,7 @@ const FINGERPRINT_FILE = '.build-fingerprint.json',
     }
     else h.update('no-package');
     return h.digest('hex');
-  },
-  writeFp = (file, fp) => fs.writeFileSync(file, JSON.stringify(fp, null, 2), 'utf-8'),
+  }, writeFp = (file, fp) => fs.writeFileSync(file, JSON.stringify(fp, null, 2), 'utf-8'),
   clearGradleCaches = (buildDir, userProjectDir) => {
     removeDir(path.join(buildDir, 'android', 'build'));
     removeDir(path.join(buildDir, 'android', 'app', 'build'));
@@ -45,86 +45,105 @@ const FINGERPRINT_FILE = '.build-fingerprint.json',
       };
     walk(templateDir);
     return h.digest('hex');
-  },
-  computeFingerprint = (userProjectDir, config, pkgRoot) => {
-    const abiFilters = [...(config.android.abiFilters || [])].sort(), libnode = {},
-      pluginDir = path.join(userProjectDir, 'node_modules', '@flun', 'nodejs-mobile-react-native'),
-      libnodeBin = path.join(pluginDir, 'android', 'libnode', 'bin');
-
-    if (fs.existsSync(libnodeBin)) {
-      for (const arch of fs.readdirSync(libnodeBin)) {
-        const so = path.join(libnodeBin, arch, 'libnode.so');
-        if (fs.existsSync(so)) {
-          const stat = fs.statSync(so);
-          libnode[arch] = { size: stat.size, mtime: Math.floor(stat.mtimeMs) };
-        }
-      }
-    }
-
-    let pluginVersion = null, cliVersion = null;
-    const pluginPkg = path.join(pluginDir, 'package.json'), cliPkg = path.join(pkgRoot, 'package.json');
-    if (fs.existsSync(pluginPkg))
-        try { pluginVersion = JSON.parse(fs.readFileSync(pluginPkg, 'utf-8')).version; } catch { };
-    if (fs.existsSync(cliPkg)) try { cliVersion = JSON.parse(fs.readFileSync(cliPkg, 'utf-8')).version; } catch { };
-
-    const depsHash = hashUserDeps(userProjectDir), a = config.android || {},
-      appInfo = {
-        appName: config.appName || null,
-        appId: config.appId || null,
-        versionCode: config.versionCode || null,
-        versionName: config.versionName || null,
-        minSdkVersion: a.minSdkVersion || null,
-        targetSdkVersion: a.targetSdkVersion || null,
-        compileSdkVersion: a.compileSdkVersion || null,
-        buildToolsVersion: a.buildToolsVersion || null,
-        usesCleartextTraffic: a.usesCleartextTraffic !== false,
-        permissions: [...(a.permissions || [])].sort(),
-      };
-
-    const templateHash = hashTemplate(path.join(pkgRoot, 'template'));
-    return { abiFilters, libnode, pluginVersion, cliVersion, depsHash, appInfo, templateHash };
-  },
-  checkAndResetCache = (buildDir, userProjectDir, config, pkgRoot) => {
-    ensureDir(buildDir);
-
-    const fpFile = path.join(buildDir, FINGERPRINT_FILE), newFp = computeFingerprint(userProjectDir, config, pkgRoot);
-    let oldFp = null;
-    if (fs.existsSync(fpFile)) try { oldFp = JSON.parse(fs.readFileSync(fpFile, 'utf-8')); } catch { };
-    if (!oldFp) return console.log(chalk.green('    ✓ 全新构建,无缓存可清')), writeFp(fpFile, newFp);
-
-    const abiChanged = JSON.stringify(oldFp.abiFilters) !== JSON.stringify(newFp.abiFilters),
-      libnodeChanged = JSON.stringify(oldFp.libnode) !== JSON.stringify(newFp.libnode),
-      pluginChanged = oldFp.pluginVersion !== newFp.pluginVersion,
-      cliChanged = oldFp.cliVersion !== newFp.cliVersion, depsChanged = oldFp.depsHash !== newFp.depsHash,
-      appInfoChanged = JSON.stringify(oldFp.appInfo) !== JSON.stringify(newFp.appInfo),
-      templateChanged = oldFp.templateHash !== newFp.templateHash,
-      structural = abiChanged || libnodeChanged || pluginChanged || cliChanged || templateChanged;
-
-    if (structural) {
-      const reasons = [];
-      if (abiChanged) reasons.push('ABI 配置');
-      if (libnodeChanged) reasons.push('libnode.so');
-      if (pluginChanged) reasons.push('插件版本');
-      if (cliChanged) reasons.push('CLI 版本');
-      if (templateChanged) reasons.push('模板文件');
-      if (depsChanged) reasons.push('用户依赖');
-      if (appInfoChanged) reasons.push('应用信息');
-      console.log(chalk.yellow('  ⚠️  检测到变化(' + reasons.join('、') + '),清理 Gradle 缓存、CMake 缓存与依赖缓存'));
-      clearGradleCaches(buildDir, userProjectDir);
-      removeDir(path.join(userProjectDir, 'node_modules', '@flun', 'nodejs-mobile-react-native', 'android', '.cxx'));
-      clearDepsCaches(buildDir);
-    }
-    else if (depsChanged || appInfoChanged) {
-      const reasons = [], targets = [];
-      if (depsChanged) reasons.push('用户依赖'), targets.push('依赖缓存', 'Gradle 缓存');
-      if (appInfoChanged) reasons.push('应用信息'), targets.push('Gradle 缓存');
-      console.log(chalk.yellow('  ⚠️  检测到变化(' + reasons.join('、') + '),清理 ' + [...new Set(targets)].join('、')));
-      clearGradleCaches(buildDir, userProjectDir);
-      if (depsChanged) clearDepsCaches(buildDir);
-    }
-    else console.log(chalk.gray('    ✓ 缓存有效,跳过清理'));
-
-    writeFp(fpFile, newFp);
   };
 
-export { computeFingerprint, checkAndResetCache };
+/**
+ * 对比构建指纹,变化时清理对应缓存;指纹写入 buildDir
+ * >查看定义:@see {@link checkAndResetCache}
+ * @param {string} buildDir 构建目录
+ * @param {string} userProjectDir 用户项目目录
+ * @param {object} config 用户配置
+ * @param {string} pkgRoot CLI 包根目录
+ * @returns {void}
+ */
+const checkAndResetCache = (buildDir, userProjectDir, config, pkgRoot) => {
+  ensureDir(buildDir);
+
+  const fpFile = path.join(buildDir, FINGERPRINT_FILE), newFp = computeFingerprint(userProjectDir, config, pkgRoot);
+  let oldFp = null;
+  if (fs.existsSync(fpFile)) try { oldFp = JSON.parse(fs.readFileSync(fpFile, 'utf-8')); } catch { };
+  if (!oldFp) return console.log(chalk.green('    ✓ 全新构建,无缓存可清')), writeFp(fpFile, newFp);
+
+  const abiChanged = JSON.stringify(oldFp.abiFilters) !== JSON.stringify(newFp.abiFilters),
+    libnodeChanged = JSON.stringify(oldFp.libnode) !== JSON.stringify(newFp.libnode),
+    pluginChanged = oldFp.pluginVersion !== newFp.pluginVersion,
+    cliChanged = oldFp.cliVersion !== newFp.cliVersion, depsChanged = oldFp.depsHash !== newFp.depsHash,
+    appInfoChanged = JSON.stringify(oldFp.appInfo) !== JSON.stringify(newFp.appInfo),
+    templateChanged = oldFp.templateHash !== newFp.templateHash,
+    structural = abiChanged || libnodeChanged || pluginChanged || cliChanged || templateChanged;
+
+  if (structural) {
+    const reasons = [];
+    if (abiChanged) reasons.push('ABI 配置');
+    if (libnodeChanged) reasons.push('libnode.so');
+    if (pluginChanged) reasons.push('插件版本');
+    if (cliChanged) reasons.push('CLI 版本');
+    if (templateChanged) reasons.push('模板文件');
+    if (depsChanged) reasons.push('用户依赖');
+    if (appInfoChanged) reasons.push('应用信息');
+    console.log(chalk.yellow('  ⚠️  检测到变化(' + reasons.join('、') + '),清理 Gradle 缓存、CMake 缓存与依赖缓存'));
+    clearGradleCaches(buildDir, userProjectDir);
+    removeDir(path.join(userProjectDir, 'node_modules', '@flun', 'nodejs-mobile-react-native', 'android', '.cxx'));
+    clearDepsCaches(buildDir);
+  }
+  else if (depsChanged || appInfoChanged) {
+    const reasons = [], targets = [];
+    if (depsChanged) reasons.push('用户依赖'), targets.push('依赖缓存', 'Gradle 缓存');
+    if (appInfoChanged) reasons.push('应用信息'), targets.push('Gradle 缓存');
+    console.log(chalk.yellow('  ⚠️  检测到变化(' + reasons.join('、') + '),清理 ' + [...new Set(targets)].join('、')));
+    clearGradleCaches(buildDir, userProjectDir);
+    if (depsChanged) clearDepsCaches(buildDir);
+  }
+  else console.log(chalk.gray('    ✓ 缓存有效,跳过清理'));
+
+  writeFp(fpFile, newFp);
+};
+
+/**
+ * 计算当前构建指纹,用于判断是否需要清理缓存
+ * >查看定义:@see {@link computeFingerprint}
+ * @param {string} userProjectDir 用户项目目录
+ * @param {object} config 用户配置
+ * @param {string} pkgRoot CLI 包根目录
+ * @returns {object} 含 abiFilters、libnode、pluginVersion、cliVersion、depsHash、appInfo、templateHash
+ */
+const computeFingerprint = (userProjectDir, config, pkgRoot) => {
+  const abiFilters = [...(config.android.abiFilters || [])].sort(), libnode = {},
+    pluginDir = path.join(userProjectDir, 'node_modules', '@flun', 'nodejs-mobile-react-native'),
+    libnodeBin = path.join(pluginDir, 'android', 'libnode', 'bin');
+
+  if (fs.existsSync(libnodeBin)) {
+    for (const arch of fs.readdirSync(libnodeBin)) {
+      const so = path.join(libnodeBin, arch, 'libnode.so');
+      if (fs.existsSync(so)) {
+        const stat = fs.statSync(so);
+        libnode[arch] = { size: stat.size, mtime: Math.floor(stat.mtimeMs) };
+      }
+    }
+  }
+
+  let pluginVersion = null, cliVersion = null;
+  const pluginPkg = path.join(pluginDir, 'package.json'), cliPkg = path.join(pkgRoot, 'package.json');
+  if (fs.existsSync(pluginPkg))
+    try { pluginVersion = JSON.parse(fs.readFileSync(pluginPkg, 'utf-8')).version; } catch { };
+  if (fs.existsSync(cliPkg)) try { cliVersion = JSON.parse(fs.readFileSync(cliPkg, 'utf-8')).version; } catch { };
+
+  const depsHash = hashUserDeps(userProjectDir), a = config.android || {},
+    appInfo = {
+      appName: config.appName || null,
+      appId: config.appId || null,
+      versionCode: config.versionCode || null,
+      versionName: config.versionName || null,
+      minSdkVersion: a.minSdkVersion || null,
+      targetSdkVersion: a.targetSdkVersion || null,
+      compileSdkVersion: a.compileSdkVersion || null,
+      buildToolsVersion: a.buildToolsVersion || null,
+      usesCleartextTraffic: a.usesCleartextTraffic !== false,
+      permissions: [...(a.permissions || [])].sort(),
+    };
+
+  const templateHash = hashTemplate(path.join(pkgRoot, 'template'));
+  return { abiFilters, libnode, pluginVersion, cliVersion, depsHash, appInfo, templateHash };
+};
+
+export { checkAndResetCache, computeFingerprint };

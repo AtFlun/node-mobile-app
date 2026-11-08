@@ -10,7 +10,8 @@ const __filename = fileURLToPath(import.meta.url), __dirname = path.dirname(__fi
 
 /**
  * 复制配置文件到项目根目录
- * @returns {boolean} - 复制是否成功
+ * >查看定义:@see {@link copyFile}
+ * @returns {boolean} 复制是否成功
  */
 const copyFile = () => {
     console.log(chalk.gray('项目根目录: ') + targetDir);

@@ -1,4 +1,3 @@
-import fs from 'fs';
 import path from 'path';
 import { writeIfChanged } from './utils.js';
 import chalk from 'chalk';
@@ -9,6 +8,11 @@ import chalk from 'chalk';
  * 上报机制(通过 rn-bridge channel 发消息给 App.tsx):
  *   - 'Node started on <URL>'  server.js 成功调用 listen
  *   - 'Node failed: <原因>'    加载异常或 5 秒内未捕获 listen
+ * >查看定义:@see {@link generateMainJs}
+ * @param {string} targetDir 生成目录
+ * @param {object} config 用户配置
+ * @param {string} moduleType 'module' 时注入 createRequire 头
+ * @returns {void}
  */
 const generateMainJs = (targetDir, config, moduleType) => {
   const entry = config.serverPath.startsWith('./') ? config.serverPath : './' + config.serverPath,
@@ -75,8 +79,8 @@ const generateMainJs = (targetDir, config, moduleType) => {
     })();
 
     ${config.advanced.keepAlive === false
-      ? '// keepAlive: false - 不发送心跳'
-      : "setInterval(() => rn_bridge.channel.send('heartbeat'), " + hb + ");"}
+        ? '// keepAlive: false - 不发送心跳'
+        : "setInterval(() => rn_bridge.channel.send('heartbeat'), " + hb + ");"}
 
     rn_bridge.channel.on('message', msg => rn_bridge.channel.send('Echo: ' + msg));
     })();`,
@@ -84,21 +88,29 @@ const generateMainJs = (targetDir, config, moduleType) => {
       ? `import { createRequire } from 'module';\nconst require = createRequire(import.meta.url);\n\n` : '',
     file = path.join(targetDir, 'main.js'), changed = writeIfChanged(file, header + body);
   console.log(chalk.green(changed ? '    ✓ 已生成 main.js' : '    ✓ main.js 无变化'));
-},
-  generateRuntime = (buildDir, config) => {
-    const data = {
-      showLoading: config.webview.showLoading,
-      loadingText: config.webview.loadingText,
-      webview: {
-        enableJavaScript: config.webview.enableJavaScript,
-        enableDomStorage: config.webview.enableDomStorage,
-        allowFileAccess: config.webview.allowFileAccess,
-        mixedContentMode: config.webview.mixedContentMode,
-        backgroundColor: config.webview.backgroundColor
-      },
-    }, content = `// 自动生成,请勿手改\nexport default ${JSON.stringify(data, null, 2)} as const;\n`,
-      changed = writeIfChanged(path.join(buildDir, 'mobileApp.runtime.ts'), content);
-    console.log(chalk.green(changed ? '    ✓ 已生成 mobileApp.runtime.ts' : '    ✓ mobileApp.runtime.ts 无变化'));
-  };
+};
 
-export { generateMainJs, generateRuntime }
+/**
+ * 生成 mobileApp.runtime.ts,写入 WebView 运行时配置
+ * >查看定义:@see {@link generateRuntime}
+ * @param {string} buildDir 构建目录
+ * @param {object} config 用户配置
+ * @returns {void}
+ */
+const generateRuntime = (buildDir, config) => {
+  const data = {
+    showLoading: config.webview.showLoading,
+    loadingText: config.webview.loadingText,
+    webview: {
+      enableJavaScript: config.webview.enableJavaScript,
+      enableDomStorage: config.webview.enableDomStorage,
+      allowFileAccess: config.webview.allowFileAccess,
+      mixedContentMode: config.webview.mixedContentMode,
+      backgroundColor: config.webview.backgroundColor
+    },
+  }, content = `// 自动生成,请勿手改\nexport default ${JSON.stringify(data, null, 2)} as const;\n`,
+    changed = writeIfChanged(path.join(buildDir, 'mobileApp.runtime.ts'), content);
+  console.log(chalk.green(changed ? '    ✓ 已生成 mobileApp.runtime.ts' : '    ✓ mobileApp.runtime.ts 无变化'));
+};
+
+export { generateMainJs, generateRuntime };

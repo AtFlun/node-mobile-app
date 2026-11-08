@@ -7,23 +7,6 @@ import chalk from 'chalk';
 // gradle.properties 按 ISO-8859-1 读取,无法改为 UTF-8
 const escapeProps = s =>
   String(s).replace(/[^\x00-\x7F]/g, ch => '\\u' + ch.charCodeAt(0).toString(16).padStart(4, '0')),
-  /**
-   * 解析最终 appName:
-   *   1. config.appName
-   *   2. 用户项目 package.json 的 name
-   *   3. 'MyApp'
-   */
-  resolveAppName = (userProjectDir, config) => {
-    if (config.appName) return String(config.appName);
-    const pkgPath = path.join(userProjectDir, 'package.json');
-    if (fs.existsSync(pkgPath)) {
-      try {
-        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-        if (pkg.name) return String(pkg.name);
-      } catch { }
-    }
-    return 'MyApp';
-  },
   /** 通用字符串转义基础:\\, ", \n, \r, \t */
   escapeStringBase = s => String(s)
     .replace(/\\/g, '\\\\')
@@ -31,10 +14,6 @@ const escapeProps = s =>
     .replace(/\n/g, '\\n')
     .replace(/\r/g, '\\r')
     .replace(/\t/g, '\\t'),
-  /** Kotlin 字符串字面量转义:基础 + 转义 $ */
-  escapeKotlinString = s => escapeStringBase(s).replace(/\$/g, '\\$'),
-  /** Swift 字符串字面量转义:基础 + 转义 \( */
-  escapeSwiftString = s => escapeStringBase(s).replace(/\(/g, '\\('),
   escapeXml = s => {
     return String(s)
       .replace(/&/g, '&amp;')
@@ -42,64 +21,35 @@ const escapeProps = s =>
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&apos;');
-  },
-  /**
-   * 把 mobileAppConfig.js 里的应用信息写入 buildDir 的 RN 工程
-   *   - android/app/build.gradle: namespace / applicationId / versionCode / versionName
-   *   - app.json: name / displayName
-   *   - res/values/strings.xml: app_name
-   *   - MainActivity.kt / MainApplication.kt: package 声明
-   */
-  patchAppConfig = (buildDir, userProjectDir, config) => {
-    const appName = resolveAppName(userProjectDir, config), appId = config.appId,
-      versionCode = config.versionCode, versionName = config.versionName,
-      gradleFile = path.join(buildDir, 'android', 'app', 'build.gradle'), appJsonFile = path.join(buildDir, 'app.json'),
-      stringsFile = path.join(buildDir, 'android', 'app', 'src', 'main', 'res', 'values', 'strings.xml'),
-      ktFiles = [
-        path.join(buildDir, 'android', 'app', 'src', 'main', 'java', 'com', 'myapp', 'MainActivity.kt'),
-        path.join(buildDir, 'android', 'app', 'src', 'main', 'java', 'com', 'myapp', 'MainApplication.kt')
-      ];
-    // 1. build.gradle
-    if (fs.existsSync(gradleFile)) {
-      let c = fs.readFileSync(gradleFile, 'utf-8');
-      c = c.replace(/namespace\s+"[^"]+"/, 'namespace "' + appId + '"');
-      c = c.replace(/applicationId\s+"[^"]+"/, 'applicationId "' + appId + '"');
-      c = c.replace(/versionCode\s+\d+/, 'versionCode ' + versionCode);
-      c = c.replace(/versionName\s+"[^"]+"/, 'versionName "' + versionName + '"');
-      writeIfChanged(gradleFile, c);
-    }
-    // 2. app.json
-    if (fs.existsSync(appJsonFile)) {
-      const obj = { name: appName, displayName: appName };
-      writeIfChanged(appJsonFile, JSON.stringify(obj, null, 2) + '\n');
-    }
-    // 3. strings.xml
-    if (fs.existsSync(stringsFile)) {
-      let c = fs.readFileSync(stringsFile, 'utf-8');
-      c = c.replace(/(<string name="app_name">)[^<]*(<\/string>)/, '$1' + escapeXml(appName) + '$2');
-      writeIfChanged(stringsFile, c);
-    }
-    // 4. MainActivity.kt / MainApplication.kt 的 package 声明
-    for (const f of ktFiles) {
-      if (!fs.existsSync(f)) continue;
-      let c = fs.readFileSync(f, 'utf-8');
-      c = c.replace(/^package\s+[\w.]+/m, 'package ' + appId);
-      // MainActivity.kt: getMainComponentName 要和 app.json.name 一致
-      c = c.replace(
-        /(override\s+fun\s+getMainComponentName\(\)\s*:\s*String\s*=\s*)"[^"]*"/, `$1"${escapeKotlinString(appName)}"`
-      );
-      writeIfChanged(f, c);
-    }
+  };
 
-    console.log(chalk.green(`    ✓ 应用信息:${appName} (${appId}) v${versionName}(${versionCode})`));
-  },
-  /**
-   * 把 mobileAppConfig.js 里的 Android 编译配置写入 buildDir:
-   *   - android/build.gradle 的 ext 块:minSdkVersion / targetSdkVersion / compileSdkVersion / buildToolsVersion
-   *   - android/app/build.gradle 的 manifestPlaceholders:usesCleartextTraffic
-   *   - AndroidManifest.xml:permissions(去重,始终含 INTERNET)
-   */
-  patchAndroidConfig = (buildDir, config) => {
+/**
+ * Kotlin 字符串字面量转义:基础 + 转义 $
+ * @param {string} s 待转义字符串
+ * @returns {string} 转义后的 Kotlin 字符串内容
+ * >查看定义:@see {@link escapeKotlinString}
+ */
+const escapeKotlinString = s => escapeStringBase(s).replace(/\$/g, '\\$');
+
+/**
+ * Swift 字符串字面量转义:基础 + 转义 \(
+ * @param {string} s 待转义字符串
+ * @returns {string} 转义后的 Swift 字符串内容
+ * >查看定义:@see {@link escapeSwiftString}
+ */
+const escapeSwiftString = s => escapeStringBase(s).replace(/\(/g, '\\(');
+
+/**
+ * 把 mobileAppConfig.js 里的 Android 编译配置写入 buildDir:
+ *   - android/build.gradle 的 ext 块:minSdkVersion / targetSdkVersion / compileSdkVersion / buildToolsVersion
+ *   - android/app/build.gradle 的 manifestPlaceholders:usesCleartextTraffic
+ *   - AndroidManifest.xml:permissions(去重,始终含 INTERNET)
+ * @param {string} buildDir 构建目录
+ * @param {object} config 用户配置
+ * @returns {void}
+ * >查看定义:@see {@link patchAndroidConfig}
+ */
+const patchAndroidConfig = (buildDir, config) => {
     const a = config.android || {}, rootGradle = path.join(buildDir, 'android', 'build.gradle'),
       manifestFile = path.join(buildDir, 'android', 'app', 'src', 'main', 'AndroidManifest.xml');
     // 1. 根 build.gradle 的 ext 块
@@ -153,84 +103,74 @@ const escapeProps = s =>
 
     console.log(chalk.green(`    ✓ Android 配置:SDK ${a.minSdkVersion}/${a.targetSdkVersion}/${a.compileSdkVersion},
       权限 ${new Set(['android.permission.INTERNET', ...(a.permissions || [])]).size} 项`));
-  },
-  /**
-   * 处理 Release 签名:
-   * - config.android.signing 有值 → 写 keystore 路径到 gradle.properties,
-   * 加 signingConfigs.release 块,release buildType 用它
-   *   - 没值 → 不动(release 沿用 debug,可装但不可发布)
-   *
-   * keystore 路径以用户项目根为基准;
-   */
-  patchSigning = (buildDir, userProjectDir, config) => {
-    const signing = config.android && config.android.signing;
-    if (!signing || !signing.keystore) return; // 未配置签名 → 保持默认
+  };
 
-    // 启用签名后 4 项均为必填,缺项时提前报错,避免 Gradle 报"password incorrect"误导排查
-    const _missing = ['storePassword', 'keyAlias', 'keyPassword'].filter((k) => !signing[k]);
-    if (_missing.length > 0) {
-      throw new Error(
-        'android.signing.keystore 已配置,但以下字段为空:' + _missing.join(', ') + '\n' +
-        '  启用签名后,keystore / storePassword / keyAlias / keyPassword 四项均为必填;\n' +
-        '  如仅需本地测试(不签名上架),可注释掉整个 signing 块--模板默认用 debug keystore 签名;'
-      );
-    }
-
-    const keystoreAbs = path.resolve(userProjectDir, signing.keystore);
-    if (!fs.existsSync(keystoreAbs))
-      return console.warn(chalk.yellow('  ⚠️  签名 keystore 不存在,跳过签名配置: ' + keystoreAbs));
-
-    // 1. 写 gradle.properties(追加或覆盖 MYAPP_RELEASE_*)
-    const propsFile = path.join(buildDir, 'android', 'gradle.properties');
-    if (fs.existsSync(propsFile)) {
-      let c = fs.readFileSync(propsFile, 'utf-8');
-      // 删掉旧的 4 行
-      c = c.replace(/^\s*MYAPP_RELEASE_STORE_FILE=.*\r?\n/gm, '');
-      c = c.replace(/^\s*MYAPP_RELEASE_STORE_PASSWORD=.*\r?\n/gm, '');
-      c = c.replace(/^\s*MYAPP_RELEASE_KEY_ALIAS=.*\r?\n/gm, '');
-      c = c.replace(/^\s*MYAPP_RELEASE_KEY_PASSWORD=.*\r?\n/gm, '');
-      // 追加新的
-      // gradle.properties 按 ISO-8859-1 读取,非 ASCII 字符必须转 \uXXXX 转义,
-      // 否则中文路径(如"桌面")会被读成乱码,导致 keystore 找不到;
-      const esc = escapeProps(keystoreAbs.replace(/\\/g, '/'));
-      c += `\nMYAPP_RELEASE_STORE_FILE=${esc}\n`;
-      c += `MYAPP_RELEASE_STORE_PASSWORD=${escapeProps(signing.storePassword || '')}\n`;
-      c += `MYAPP_RELEASE_KEY_ALIAS=${escapeProps(signing.keyAlias || '')}\n`;
-      c += `MYAPP_RELEASE_KEY_PASSWORD=${escapeProps(signing.keyPassword || '')}\n`;
-      writeIfChanged(propsFile, c);
-    }
-
-    // 2. app/build.gradle: 加 signingConfigs.release,并让 buildTypes.release 用它
-    const gradleFile = path.join(buildDir, 'android', 'app', 'build.gradle');
+/**
+ * 把 mobileAppConfig.js 里的应用信息写入 buildDir 的 RN 工程
+ *   - android/app/build.gradle: namespace / applicationId / versionCode / versionName
+ *   - app.json: name / displayName
+ *   - res/values/strings.xml: app_name
+ *   - MainActivity.kt / MainApplication.kt: package 声明
+ * @param {string} buildDir 构建目录
+ * @param {string} userProjectDir 用户项目目录
+ * @param {object} config 用户配置
+ * @returns {void}
+ * >查看定义:@see {@link patchAppConfig}
+ */
+const patchAppConfig = (buildDir, userProjectDir, config) => {
+    const appName = resolveAppName(userProjectDir, config), appId = config.appId,
+      versionCode = config.versionCode, versionName = config.versionName,
+      gradleFile = path.join(buildDir, 'android', 'app', 'build.gradle'), appJsonFile = path.join(buildDir, 'app.json'),
+      stringsFile = path.join(buildDir, 'android', 'app', 'src', 'main', 'res', 'values', 'strings.xml'),
+      ktFiles = [
+        path.join(buildDir, 'android', 'app', 'src', 'main', 'java', 'com', 'myapp', 'MainActivity.kt'),
+        path.join(buildDir, 'android', 'app', 'src', 'main', 'java', 'com', 'myapp', 'MainApplication.kt')
+      ];
+    // 1. build.gradle
     if (fs.existsSync(gradleFile)) {
       let c = fs.readFileSync(gradleFile, 'utf-8');
-
-      // 加 release 签名块(先删旧的,避免重复)
-      c = c.replace(/\s*release\s*\{\s*storeFile[\s\S]*?\}\r?\n(\s*\}\s*\r?\n)/, '$1');
-      // 在 signingConfigs { 之后插入
-      c = c.replace(/(signingConfigs\s*\{)/,
-        `$1
-        release {
-            storeFile file(MYAPP_RELEASE_STORE_FILE)
-            storePassword MYAPP_RELEASE_STORE_PASSWORD
-            keyAlias MYAPP_RELEASE_KEY_ALIAS
-            keyPassword MYAPP_RELEASE_KEY_PASSWORD
-        }`
-      );
-
-      // 让 release buildType 用 signingConfigs.release
-      // 只替换 release { 之后的第一个 signingConfig signingConfigs.debug
-      c = c.replace(/(release\s*\{\s*\n\s*signingConfig\s+)signingConfigs\.debug/, '$1signingConfigs.release');
+      c = c.replace(/namespace\s+"[^"]+"/, 'namespace "' + appId + '"');
+      c = c.replace(/applicationId\s+"[^"]+"/, 'applicationId "' + appId + '"');
+      c = c.replace(/versionCode\s+\d+/, 'versionCode ' + versionCode);
+      c = c.replace(/versionName\s+"[^"]+"/, 'versionName "' + versionName + '"');
       writeIfChanged(gradleFile, c);
     }
+    // 2. app.json
+    if (fs.existsSync(appJsonFile)) {
+      const obj = { name: appName, displayName: appName };
+      writeIfChanged(appJsonFile, JSON.stringify(obj, null, 2) + '\n');
+    }
+    // 3. strings.xml
+    if (fs.existsSync(stringsFile)) {
+      let c = fs.readFileSync(stringsFile, 'utf-8');
+      c = c.replace(/(<string name="app_name">)[^<]*(<\/string>)/, '$1' + escapeXml(appName) + '$2');
+      writeIfChanged(stringsFile, c);
+    }
+    // 4. MainActivity.kt / MainApplication.kt 的 package 声明
+    for (const f of ktFiles) {
+      if (!fs.existsSync(f)) continue;
+      let c = fs.readFileSync(f, 'utf-8');
+      c = c.replace(/^package\s+[\w.]+/m, 'package ' + appId);
+      // MainActivity.kt: getMainComponentName 要和 app.json.name 一致
+      c = c.replace(
+        /(override\s+fun\s+getMainComponentName\(\)\s*:\s*String\s*=\s*)"[^"]*"/, `$1"${escapeKotlinString(appName)}"`
+      );
+      writeIfChanged(f, c);
+    }
 
-    console.log(chalk.green('    ✓ Release 签名已配置: ' + path.basename(keystoreAbs)));
-  },
-  /**
-   * 应用图标:把用户提供的 PNG 缩放到 5 个 Android 密度,覆盖各 mipmap 目录下的 ic_launcher 与 ic_launcher_round
-   * 未配置或文件不存在时保持默认
-   */
-  patchIcon = async (buildDir, userProjectDir, config) => {
+    console.log(chalk.green(`    ✓ 应用信息:${appName} (${appId}) v${versionName}(${versionCode})`));
+  };
+
+/**
+ * 应用图标:把用户提供的 PNG 缩放到 5 个 Android 密度,覆盖各 mipmap 目录下的 ic_launcher 与 ic_launcher_round
+ * 未配置或文件不存在时保持默认
+ * @param {string} buildDir 构建目录
+ * @param {string} userProjectDir 用户项目目录
+ * @param {object} config 用户配置
+ * @returns {Promise<void>}
+ * >查看定义:@see {@link patchIcon}
+ */
+const patchIcon = async (buildDir, userProjectDir, config) => {
     const iconPath = config.android && config.android.icon;
     if (!iconPath) return;
 
@@ -259,15 +199,21 @@ const escapeProps = s =>
     }
 
     console.log(chalk.green(`    ✓ 图标已应用: ${path.basename(iconAbs)}`));
-  },
-  /**
-   * 写入 iOS 工程配置:
-   *   - Info.plist: CFBundleDisplayName
-   * - project.pbxproj: PRODUCT_BUNDLE_IDENTIFIER /
-   * MARKETING_VERSION / CURRENT_PROJECT_VERSION / IPHONEOS_DEPLOYMENT_TARGET
-   * 只在 buildDir 里存在 ios/ 时执行(其余平台跳过);
-   */
-  patchIosConfig = (buildDir, userProjectDir, config) => {
+  };
+
+/**
+ * 写入 iOS 工程配置:
+ *   - Info.plist: CFBundleDisplayName
+ *   - project.pbxproj: PRODUCT_BUNDLE_IDENTIFIER / MARKETING_VERSION / CURRENT_PROJECT_VERSION
+ *     / IPHONEOS_DEPLOYMENT_TARGET
+ * 只在 buildDir 里存在 ios/ 时执行(其余平台跳过);
+ * @param {string} buildDir 构建目录
+ * @param {string} userProjectDir 用户项目目录
+ * @param {object} config 用户配置
+ * @returns {void}
+ * >查看定义:@see {@link patchIosConfig}
+ */
+const patchIosConfig = (buildDir, userProjectDir, config) => {
     const iosDir = path.join(buildDir, 'ios');
     if (!fs.existsSync(iosDir)) return;
 
@@ -342,13 +288,19 @@ const escapeProps = s =>
 
     console.log(chalk.green(`    ✓ iOS 配置:${appName} (${appId}) v${versionName}(${versionCode})` +
         `, target ${deploymentTarget}`));
-  },
-  /**
-   * iOS 应用图标:把用户提供的 PNG 缩放到 9 个尺寸,写入 AppIcon.appiconset
-   * 同时改写 Contents.json 加 filename 字段
-   * 未配置或文件不存在时保持默认(无图标,Xcode 会用系统占位)
-   */
-  patchIosIcon = async (buildDir, userProjectDir, config) => {
+  };
+
+/**
+ * iOS 应用图标:把用户提供的 PNG 缩放到 9 个尺寸,写入 AppIcon.appiconset
+ * 同时改写 Contents.json 加 filename 字段
+ * 未配置或文件不存在时保持默认(无图标,Xcode 会用系统占位)
+ * @param {string} buildDir 构建目录
+ * @param {string} userProjectDir 用户项目目录
+ * @param {object} config 用户配置
+ * @returns {Promise<void>}
+ * >查看定义:@see {@link patchIosIcon}
+ */
+const patchIosIcon = async (buildDir, userProjectDir, config) => {
     const iconPath = config.ios && config.ios.icon;
     if (!iconPath) return;
 
@@ -386,9 +338,139 @@ const escapeProps = s =>
     // 改写 Contents.json,给每项加 filename
     writeIfChanged(contentsFile, JSON.stringify(contents, null, 2) + '\n');
     console.log(chalk.green(`    ✓ iOS 图标已应用: ${path.basename(iconAbs)}`));
-  }
+  };
+
+/**
+ * 按 config.android.mavenRepositories 重写 settings.gradle 与根 build.gradle 的仓库列表
+ * - 未配置(null)时保持模板原样
+ * - 配置时按数组顺序写入,替换原有 maven/google/mavenCentral 条目
+ * @param {string} buildDir 构建目录
+ * @param {object} config 用户配置
+ * @returns {void}
+ * >查看定义:@see {@link patchMavenRepositories}
+ */
+const patchMavenRepositories = (buildDir, config) => {
+    const repos = config && config.android && config.android.mavenRepositories;
+    if (!Array.isArray(repos) || repos.length === 0) return;
+    const body = repos.map(u => "        maven { url '" + u + "' }").join('\n');
+
+    const settingsFile = path.join(buildDir, 'android', 'settings.gradle');
+    if (fs.existsSync(settingsFile)) {
+      const src = fs.readFileSync(settingsFile, 'utf-8'),
+        next = src.replace(/(pluginManagement\s*\{\s*repositories\s*\{)[\s\S]*?(\n    \})/, '$1\n' + body + '$2');
+      if (next !== src) writeIfChanged(settingsFile, next);
+    }
+
+    const rootFile = path.join(buildDir, 'android', 'build.gradle');
+    if (fs.existsSync(rootFile)) {
+      const src = fs.readFileSync(rootFile, 'utf-8'),
+        next = src.replace(/(buildscript\s*\{[\s\S]*?repositories\s*\{)[\s\S]*?(\n    \})/, '$1\n' + body + '$2');
+      if (next !== src) writeIfChanged(rootFile, next);
+    }
+    console.log(chalk.green('    ✓ 已应用自定义 Maven 仓库(' + repos.length + ' 项)'));
+  };
+
+/**
+ * 处理 Release 签名:
+ * - config.android.signing 有值 -> 写 keystore 路径到 gradle.properties,
+ * 加 signingConfigs.release 块,release buildType 用它
+ *   - 没值 -> 不动(release 沿用 debug,可装但不可发布)
+ * 
+ * keystore 路径以用户项目根为基准;
+ * @param {string} buildDir 构建目录
+ * @param {string} userProjectDir 用户项目目录
+ * @param {object} config 用户配置
+ * @returns {void}
+ * >查看定义:@see {@link patchSigning}
+ */
+const patchSigning = (buildDir, userProjectDir, config) => {
+    const signing = config.android && config.android.signing;
+    if (!signing || !signing.keystore) return; // 未配置签名 → 保持默认
+
+    // 启用签名后 4 项均为必填,缺项时提前报错,避免 Gradle 报"password incorrect"误导排查
+    const _missing = ['storePassword', 'keyAlias', 'keyPassword'].filter((k) => !signing[k]);
+    if (_missing.length > 0) {
+      throw new Error(
+        'android.signing.keystore 已配置,但以下字段为空:' + _missing.join(', ') + '\n' +
+        '  启用签名后,keystore / storePassword / keyAlias / keyPassword 四项均为必填;\n' +
+        '  如仅需本地测试(不签名上架),可注释掉整个 signing 块--模板默认用 debug keystore 签名;'
+      );
+    }
+
+    const keystoreAbs = path.resolve(userProjectDir, signing.keystore);
+    if (!fs.existsSync(keystoreAbs))
+      return console.warn(chalk.yellow('  ⚠️  签名 keystore 不存在,跳过签名配置: ' + keystoreAbs));
+
+    // 1. 写 gradle.properties(追加或覆盖 MYAPP_RELEASE_*)
+    const propsFile = path.join(buildDir, 'android', 'gradle.properties');
+    if (fs.existsSync(propsFile)) {
+      let c = fs.readFileSync(propsFile, 'utf-8');
+      // 删掉旧的 4 行
+      c = c.replace(/^\s*MYAPP_RELEASE_STORE_FILE=.*\r?\n/gm, '');
+      c = c.replace(/^\s*MYAPP_RELEASE_STORE_PASSWORD=.*\r?\n/gm, '');
+      c = c.replace(/^\s*MYAPP_RELEASE_KEY_ALIAS=.*\r?\n/gm, '');
+      c = c.replace(/^\s*MYAPP_RELEASE_KEY_PASSWORD=.*\r?\n/gm, '');
+      // 追加新的
+      // gradle.properties 按 ISO-8859-1 读取,非 ASCII 字符必须转 \uXXXX 转义,
+      // 否则中文路径(如"桌面")会被读成乱码,导致 keystore 找不到;
+      const esc = escapeProps(keystoreAbs.replace(/\\/g, '/'));
+      c += `\nMYAPP_RELEASE_STORE_FILE=${esc}\n`;
+      c += `MYAPP_RELEASE_STORE_PASSWORD=${escapeProps(signing.storePassword || '')}\n`;
+      c += `MYAPP_RELEASE_KEY_ALIAS=${escapeProps(signing.keyAlias || '')}\n`;
+      c += `MYAPP_RELEASE_KEY_PASSWORD=${escapeProps(signing.keyPassword || '')}\n`;
+      writeIfChanged(propsFile, c);
+    }
+
+    // 2. app/build.gradle: 加 signingConfigs.release,并让 buildTypes.release 用它
+    const gradleFile = path.join(buildDir, 'android', 'app', 'build.gradle');
+    if (fs.existsSync(gradleFile)) {
+      let c = fs.readFileSync(gradleFile, 'utf-8');
+
+      // 加 release 签名块(先删旧的,避免重复)
+      c = c.replace(/\s*release\s*\{\s*storeFile[\s\S]*?\}\r?\n(\s*\}\s*\r?\n)/, '$1');
+      // 在 signingConfigs { 之后插入
+      c = c.replace(/(signingConfigs\s*\{)/,
+        `$1
+        release {
+            storeFile file(MYAPP_RELEASE_STORE_FILE)
+            storePassword MYAPP_RELEASE_STORE_PASSWORD
+            keyAlias MYAPP_RELEASE_KEY_ALIAS
+            keyPassword MYAPP_RELEASE_KEY_PASSWORD
+        }`
+      );
+
+      // 让 release buildType 用 signingConfigs.release
+      // 只替换 release { 之后的第一个 signingConfig signingConfigs.debug
+      c = c.replace(/(release\s*\{\s*\n\s*signingConfig\s+)signingConfigs\.debug/, '$1signingConfigs.release');
+      writeIfChanged(gradleFile, c);
+    }
+
+    console.log(chalk.green('    ✓ Release 签名已配置: ' + path.basename(keystoreAbs)));
+  };
+
+/**
+ * 解析最终 appName:
+ *   1. config.appName
+ *   2. 用户项目 package.json 的 name
+ *   3. 'MyApp'
+ * @param {string} userProjectDir 用户项目目录
+ * @param {object} config 用户配置
+ * @returns {string} 最终应用名
+ * >查看定义:@see {@link resolveAppName}
+ */
+const resolveAppName = (userProjectDir, config) => {
+    if (config.appName) return String(config.appName);
+    const pkgPath = path.join(userProjectDir, 'package.json');
+    if (fs.existsSync(pkgPath)) {
+      try {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+        if (pkg.name) return String(pkg.name);
+      } catch { }
+    }
+    return 'MyApp';
+  };
 
 export {
-  resolveAppName, escapeKotlinString, escapeSwiftString, patchAppConfig, patchAndroidConfig, patchSigning,
-  patchIcon, patchIosConfig, patchIosIcon
+  escapeKotlinString, escapeSwiftString, patchAndroidConfig, patchAppConfig, patchIcon, patchIosConfig,
+  patchIosIcon, patchMavenRepositories, patchSigning, resolveAppName
 };

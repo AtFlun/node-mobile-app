@@ -1,24 +1,10 @@
-import path from 'path';
-import fs from 'fs';
-import { run, ensureDir } from './utils.js';
+import { ensureDir, run } from './utils.js';
 import chalk from 'chalk';
+import fs from 'fs';
+import path from 'path';
 
+/** 应用 Scheme 名称,与 iOS 工程一致 */
 const SCHEME = 'MyApp',
-  /** iOS 相关命令只能在 macOS 上跑 */
-  ensureMac = () => {
-    if (process.platform !== 'darwin') throw new Error('iOS 构建只能在 macOS 上执行(当前平台: ' + process.platform + ')');
-  },
-  /** 检查 xcodebuild 是否存在 */
-  checkIosTools = () => {
-    const r = run('which', ['xcodebuild'], { stdio: 'pipe' });
-    if (r.status !== 0) throw new Error('未找到 xcodebuild,请安装 Xcode 并运行 xcode-select --install');
-  },
-  /**
-   * 执行 pod install(若 Pods/ 已存在且 Podfile.lock 未变,cocoapods 会自动跳过)
-   */
-  podInstall = iosDir => {
-    console.log(chalk.cyan('  pod install ...')), run('pod', ['install'], { cwd: iosDir, inherit: true });
-  },
   /**
    * 把 config.ios.signing.certificate 导入临时 keychain,供 xcodebuild 签名用
    * 返回 { keychainPath, keychainPassword } 或 null(未配置 / 文件缺失)
@@ -44,98 +30,128 @@ const SCHEME = 'MyApp',
     run('security', ['set-keychain-settings', '-lut', '3600', keychainPath], { quiet: true });
     run('security', ['unlock-keychain', '-p', keychainPassword, keychainPath], { quiet: true });
     run('security', [
-      'import', certPath,
-      '-k', keychainPath,
-      '-P', signing.certificatePassword || '',
-      '-T', '/usr/bin/codesign',
-      '-T', '/usr/bin/security'
+      'import', certPath, '-k', keychainPath, '-P', signing.certificatePassword || '',
+      '-T', '/usr/bin/codesign', '-T', '/usr/bin/security'
     ], { quiet: true });
     run('security', [
-      'set-key-partition-list',
-      '-S', 'apple-tool:,apple:,codesign:',
-      '-s', '-k', keychainPassword, keychainPath
+      'set-key-partition-list', '-S', 'apple-tool:,apple:,codesign:', '-s', '-k', keychainPassword, keychainPath
     ], { quiet: true });
 
     return { keychainPath, keychainPassword };
-  },
-  /**
-   * xcodebuild archive
-   * 返回 xcarchive 路径
-   */
-  xcodebuildArchive = (buildDir, config, release, userProjectDir) => {
-    const iosDir = path.join(buildDir, 'ios'), workspace = path.join(iosDir, SCHEME + '.xcworkspace');
-    if (!fs.existsSync(workspace)) throw new Error('未找到 ' + workspace + '(pod install 是否成功?)');
-
-    const archiveDir = path.join(iosDir, 'build');
-    ensureDir(archiveDir);
-    const archivePath = path.join(archiveDir, SCHEME + '.xcarchive'), configName = release ? 'Release' : 'Debug',
-      teamId = (config.ios && config.ios.signing && config.ios.signing.teamId) || '',
-      args = [
-        '-workspace', workspace,
-        '-scheme', SCHEME,
-        '-configuration', configName,
-        '-destination', 'generic/platform=iOS',
-        '-archivePath', archivePath,
-        'archive',
-      ];
-
-    if (teamId) args.push('DEVELOPMENT_TEAM=' + teamId);
-
-    // 若配置了 certificate,导入临时 keychain 并让 xcodebuild 使用
-    const keychain = setupSigningKeychain(buildDir, userProjectDir, config);
-    if (keychain) args.push('OTHER_CODE_SIGN_FLAGS=--keychain ' + keychain.keychainPath);
-
-    console.log(chalk.cyan('  xcodebuild archive ...')), run('xcodebuild', args, { cwd: iosDir, quiet: true });
-    return archivePath;
-  },
-  /**
-   * xcodebuild -exportArchive,导出 .ipa
-   * 返回 .ipa 路径
-   */
-  xcodebuildExport = (buildDir, config, release, outDir, userProjectDir) => {
-    const iosDir = path.join(buildDir, 'ios'), exportDir = path.join(iosDir, 'build', 'export');
-    ensureDir(exportDir);
-    const archivePath = path.join(iosDir, 'build', SCHEME + '.xcarchive'), method = release ? 'ad-hoc' : 'development',
-      signing = (config.ios && config.ios.signing) || {}, teamId = signing.teamId || '',
-      // provisioningProfile 路径 → 取 basename(去扩展名),写进 exportOptions.plist
-      profilePath = signing.provisioningProfile ? path.resolve(userProjectDir, signing.provisioningProfile) : '',
-      profileName = profilePath ? path.basename(profilePath).replace(/\.mobileprovision$/i, '') : '',
-      plistPath = path.join(iosDir, 'build', 'exportOptions.plist'),
-      plist = [
-        '<?xml version="1.0" encoding="UTF-8"?>',
-        '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">',
-        '<plist version="1.0">',
-        '<dict>',
-        '  <key>method</key>',
-        '  <string>' + method + '</string>',
-        '  <key>stripSwiftSymbols</key>',
-        '  <true/>',
-        '  <key>compileBitcode</key>',
-        '  <false/>',
-        teamId ? '  <key>teamID</key>' : '',
-        teamId ? '  <string>' + teamId + '</string>' : '',
-        profileName ? '  <key>provisioningProfiles</key>' : '',
-        profileName ? '  <dict>' : '',
-        profileName ? '    <key>' + config.appId + '</key>' : '',
-        profileName ? '    <string>' + profileName + '</string>' : '',
-        profileName ? '  </dict>' : '',
-        '</dict>',
-        '</plist>',
-      ].filter(Boolean).join('\n');
-    fs.writeFileSync(plistPath, plist, 'utf-8'); // 生成 exportOptions.plist
-
-    console.log(chalk.cyan('  xcodebuild -exportArchive ...'));
-    run('xcodebuild', [
-      '-exportArchive',
-      '-archivePath', archivePath,
-      '-exportOptionsPlist', plistPath,
-      '-exportPath', exportDir,
-    ], { cwd: iosDir, quiet: true });
-
-    // 找 .ipa
-    const files = fs.readdirSync(exportDir).filter(f => f.endsWith('.ipa'));
-    if (files.length === 0) throw new Error('导出目录里没有 .ipa: ' + exportDir);
-    return path.join(exportDir, files[0]);
   };
 
-export { ensureMac, checkIosTools, podInstall, xcodebuildArchive, xcodebuildExport }
+/**
+ * 检查 xcodebuild 是否存在,缺失时抛错提示安装 Xcode
+ * >查看定义:@see {@link checkIosTools}
+ * @returns {void}
+ */
+const checkIosTools = () => {
+  const r = run('which', ['xcodebuild'], { stdio: 'pipe' });
+  if (r.status !== 0) throw new Error('未找到 xcodebuild,请安装 Xcode 并运行 xcode-select --install');
+};
+
+/**
+ * iOS 相关命令只能在 macOS 上跑,非 darwin 抛错
+ * >查看定义:@see {@link ensureMac}
+ * @returns {void}
+ */
+const ensureMac = () => {
+  if (process.platform !== 'darwin') throw new Error('iOS 构建只能在 macOS 上执行(当前平台: ' + process.platform + ')');
+};
+
+/**
+ * 执行 pod install(若 Pods/ 已存在且 Podfile.lock 未变,cocoapods 会自动跳过)
+ * >查看定义:@see {@link podInstall}
+ * @param {string} iosDir iOS 工程目录
+ * @returns {void}
+ */
+const podInstall = iosDir => {
+  console.log(chalk.cyan('  pod install ...')), run('pod', ['install'], { cwd: iosDir, inherit: true });
+};
+
+/**
+ * xcodebuild archive,返回 xcarchive 路径
+ * >查看定义:@see {@link xcodebuildArchive}
+ * @param {string} buildDir 构建目录
+ * @param {object} config 用户配置
+ * @param {boolean} release 是否 Release 配置
+ * @param {string} userProjectDir 用户项目目录
+ * @returns {string} xcarchive 路径
+ */
+const xcodebuildArchive = (buildDir, config, release, userProjectDir) => {
+  const iosDir = path.join(buildDir, 'ios'), workspace = path.join(iosDir, SCHEME + '.xcworkspace');
+  if (!fs.existsSync(workspace)) throw new Error('未找到 ' + workspace + '(pod install 是否成功?)');
+
+  const archiveDir = path.join(iosDir, 'build');
+  ensureDir(archiveDir);
+  const archivePath = path.join(archiveDir, SCHEME + '.xcarchive'), configName = release ? 'Release' : 'Debug',
+    teamId = (config.ios && config.ios.signing && config.ios.signing.teamId) || '',
+    args = [
+      '-workspace', workspace, '-scheme', SCHEME, '-configuration', configName,
+      '-destination', 'generic/platform=iOS', '-archivePath', archivePath, 'archive'
+    ];
+
+  if (teamId) args.push('DEVELOPMENT_TEAM=' + teamId);
+
+  // 若配置了 certificate,导入临时 keychain 并让 xcodebuild 使用
+  const keychain = setupSigningKeychain(buildDir, userProjectDir, config);
+  if (keychain) args.push('OTHER_CODE_SIGN_FLAGS=--keychain ' + keychain.keychainPath);
+
+  console.log(chalk.cyan('  xcodebuild archive ...')), run('xcodebuild', args, { cwd: iosDir, quiet: true });
+  return archivePath;
+};
+
+/**
+ * xcodebuild -exportArchive,导出 .ipa,返回 .ipa 路径
+ * >查看定义:@see {@link xcodebuildExport}
+ * @param {string} buildDir 构建目录
+ * @param {object} config 用户配置
+ * @param {boolean} release 是否 Release 导出
+ * @param {string} outDir 输出目录
+ * @param {string} userProjectDir 用户项目目录
+ * @returns {string} .ipa 文件路径
+ */
+const xcodebuildExport = (buildDir, config, release, outDir, userProjectDir) => {
+  const iosDir = path.join(buildDir, 'ios'), exportDir = path.join(iosDir, 'build', 'export');
+  ensureDir(exportDir);
+  const archivePath = path.join(iosDir, 'build', SCHEME + '.xcarchive'), method = release ? 'ad-hoc' : 'development',
+    signing = (config.ios && config.ios.signing) || {}, teamId = signing.teamId || '',
+    // provisioningProfile 路径 → 取 basename(去扩展名),写进 exportOptions.plist
+    profilePath = signing.provisioningProfile ? path.resolve(userProjectDir, signing.provisioningProfile) : '',
+    profileName = profilePath ? path.basename(profilePath).replace(/\.mobileprovision$/i, '') : '',
+    plistPath = path.join(iosDir, 'build', 'exportOptions.plist'),
+    plist = [
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">',
+      '<plist version="1.0">',
+      '<dict>',
+      '  <key>method</key>',
+      '  <string>' + method + '</string>',
+      '  <key>stripSwiftSymbols</key>',
+      '  <true/>',
+      '  <key>compileBitcode</key>',
+      '  <false/>',
+      teamId ? '  <key>teamID</key>' : '',
+      teamId ? '  <string>' + teamId + '</string>' : '',
+      profileName ? '  <key>provisioningProfiles</key>' : '',
+      profileName ? '  <dict>' : '',
+      profileName ? '    <key>' + config.appId + '</key>' : '',
+      profileName ? '    <string>' + profileName + '</string>' : '',
+      profileName ? '  </dict>' : '',
+      '</dict>',
+      '</plist>',
+    ].filter(Boolean).join('\n');
+  fs.writeFileSync(plistPath, plist, 'utf-8'); // 生成 exportOptions.plist
+
+  console.log(chalk.cyan('  xcodebuild -exportArchive ...'));
+  run('xcodebuild', [
+    '-exportArchive', '-archivePath', archivePath, '-exportOptionsPlist', plistPath, '-exportPath', exportDir
+  ], { cwd: iosDir, quiet: true });
+
+  // 找 .ipa
+  const files = fs.readdirSync(exportDir).filter(f => f.endsWith('.ipa'));
+  if (files.length === 0) throw new Error('导出目录里没有 .ipa: ' + exportDir);
+  return path.join(exportDir, files[0]);
+};
+
+export { checkIosTools, ensureMac, podInstall, xcodebuildArchive, xcodebuildExport };
