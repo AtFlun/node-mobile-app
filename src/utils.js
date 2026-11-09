@@ -322,6 +322,23 @@ const spawnCmdAsync = (bin, args, baseOpts = {}) => {
 };
 
 /**
+ * Gradle 构建失败时,若用户配置了自定义下载地址或 Maven 仓库,提示改回自动探测
+ * >查看定义:@see {@link warnGradleDownloadHint}
+ * @param {object} config 用户配置
+ * @returns {void}
+ */
+const warnGradleDownloadHint = config => {
+  const a = config && config.android;
+  if (!a) return;
+  if (a.gradleDistributionUrl)
+    console.error(chalk.yellow('  提示: android.gradleDistributionUrl 已配置但下载或构建失败,' +
+      '可将该字段改回 null 让工具自动探测,或配置正确可达地址'));
+  if (Array.isArray(a.mavenRepositories) && a.mavenRepositories.length > 0)
+    console.error(chalk.yellow('  提示: android.mavenRepositories 已配置但依赖解析失败,' +
+      '可将该字段改回 null 使用内置默认仓库,或配置正确可达的仓库地址'));
+};
+
+/**
  * 内容不同才写文件,避免无谓的 mtime 变化
  * >查看定义:@see {@link writeIfChanged}
  * @param {string} file 文件路径
@@ -363,5 +380,5 @@ const writeJson = (file, obj) => fs.writeFileSync(file, JSON.stringify(obj, null
 export {
   buildEslintConfigSource, copyDir, copyFileIfChanged, ensureDir, ensureInstallable, findAdb, findHermesc,
   getInstalledVariant, isExcluded, readJson, removeDir, run, runQuiet, runSilent, runStream,
-  sanitizeFileName, spawnCmdAsync, writeIfChanged, writeInstallState, writeJson
+  sanitizeFileName, spawnCmdAsync, warnGradleDownloadHint, writeIfChanged, writeInstallState, writeJson
 };

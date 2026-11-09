@@ -40,6 +40,7 @@ const DEFAULT_CONFIG = {
     compileSdkVersion: 37,
     buildToolsVersion: '37.0.0',
     gradleDistributionUrl: null,
+    mavenRepositories: null,
     abiFilters: ['arm64-v8a'],
     icon: './build/icon.png',
     usesCleartextTraffic: true,
@@ -132,7 +133,7 @@ const validateConfig = (config, userProjectDir) => {
   if (!config.android.abiFilters?.length) errors.push('android.abiFilters 不能为空');
   if (config.android.gradleDistributionUrl && !/^https?:\/\/.+\.zip$/.test(config.android.gradleDistributionUrl))
     errors.push('android.gradleDistributionUrl 必须是 http(s) 且以 .zip 结尾: ' + config.android.gradleDistributionUrl);
-  if (config.android.mavenRepositories !== null && !Array.isArray(config.android.mavenRepositories))
+  if (config.android.mavenRepositories != null && !Array.isArray(config.android.mavenRepositories))
     errors.push('android.mavenRepositories 必须是数组或 null');
   else if (Array.isArray(config.android.mavenRepositories)) {
     const bad = config.android.mavenRepositories.filter(u => typeof u !== 'string' || !/^https?:\/\//.test(u));

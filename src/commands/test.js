@@ -19,7 +19,8 @@ import {
 } from '../patcher.js';
 import { checkIosTools, ensureMac, podInstall } from '../platform-ios.js';
 import {
-  ensureDir, ensureInstallable, findAdb, findHermesc, run, runSilent, runStream, spawnCmdAsync, writeInstallState
+  ensureDir, ensureInstallable, findAdb, findHermesc, run, runSilent, runStream, spawnCmdAsync,
+  warnGradleDownloadHint, writeInstallState
 } from '../utils.js';
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -144,15 +145,19 @@ const runTest = async flags => {
     }
     console.log(chalk.cyan(`\n[10/${total}] 编译 Debug 包`));
     const gradlew = process.platform === 'win32' ? 'gradlew.bat' : './gradlew';
-    if (process.env.OPTIMIZE_DEBUG) await runStream(gradlew, ['assembleDebug'], {
-      cwd: path.join(buildDir, 'android'), env: { ...process.env, NODE_MOBILE_MODE: 'test' }, stdio: 'inherit'
-    });
-    else {
-      console.log(chalk.gray('  编译中...'));
-      run(gradlew, ['assembleDebug'], {
-        cwd: path.join(buildDir, 'android'), env: { ...process.env, NODE_MOBILE_MODE: 'test' }, quiet: true
+    try {
+      if (process.env.OPTIMIZE_DEBUG) await runStream(gradlew, ['assembleDebug'], {
+        cwd: path.join(buildDir, 'android'), env: { ...process.env, NODE_MOBILE_MODE: 'test' }, stdio: 'inherit'
       });
-      console.log(chalk.green('    ✓ 编译完成'));
+      else {
+        console.log(chalk.gray('  编译中...'));
+        run(gradlew, ['assembleDebug'], {
+          cwd: path.join(buildDir, 'android'), env: { ...process.env, NODE_MOBILE_MODE: 'test' }, quiet: true
+        });
+        console.log(chalk.green('    ✓ 编译完成'));
+      }
+    } catch (err) {
+      warnGradleDownloadHint(config); throw err;
     }
 
     console.log(chalk.cyan(`\n[11/${total}] 安装到设备`));

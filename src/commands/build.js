@@ -16,7 +16,7 @@ import {
   patchSigning, resolveAppName
 } from '../patcher.js';
 import { checkIosTools, ensureMac, podInstall, xcodebuildArchive, xcodebuildExport } from '../platform-ios.js';
-import { ensureDir, run, sanitizeFileName } from '../utils.js';
+import { ensureDir, run, sanitizeFileName, warnGradleDownloadHint } from '../utils.js';
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 /**
@@ -97,7 +97,11 @@ const runBuild = async (flags) => {
   if (flags.arch) gradleArgs.push(`-PreactNativeArchitectures=${flags.arch}`);
 
   const gradlew = process.platform === 'win32' ? 'gradlew.bat' : './gradlew';
-  run(gradlew, gradleArgs, { cwd: path.join(buildDir, 'android'), quiet: true });
+  try {
+    run(gradlew, gradleArgs, { cwd: path.join(buildDir, 'android'), quiet: true });
+  } catch (err) {
+    warnGradleDownloadHint(config); throw err;
+  }
 
   const apkDir = path.join(buildDir, 'android', 'app', 'build', 'outputs', 'apk', release ? 'release' : 'debug');
   console.log(chalk.green('\n✅ 打包完成'));

@@ -139,6 +139,7 @@ const BUILD_DIR_NAME = 'node-mobile-app-build',
     const escaped = url.replace(/:/g, '\\:'),
       next = src.replace(/^distributionUrl=.*$/m, 'distributionUrl=' + escaped);
     if (next !== src) writeIfChanged(file, next);
+    if (configured) console.log(chalk.green('    ✓ 已应用自定义 Gradle 下载地址: ' + url));
   },
   /**
    * 把 buildDir/package.json 的依赖版本同步为主包 dependencies 的版本

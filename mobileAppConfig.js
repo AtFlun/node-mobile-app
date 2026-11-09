@@ -70,9 +70,9 @@ const mobileAppConfig = {
     // 未配置时使用内置默认:阿里云 public/google/gradle-plugin + 官方 google/mavenCentral
     mavenRepositories: null,          // 示例见下,按需取消注释
     // mavenRepositories: [
-    //   'https://maven.aliyun.com/repository/public',
-    //   'https://maven.aliyun.com/repository/google',
-    //   'https://maven.aliyun.com/repository/gradle-plugin',
+    //   'https://maven.aliyun.com/repository/public',         // Maven Central:通用开源库
+    //   'https://maven.aliyun.com/repository/google',         // Google Maven:AGP、AndroidX
+    //   'https://maven.aliyun.com/repository/gradle-plugin',  // Gradle 插件门户:插件本体
     // ],
     abiFilters: ['arm64-v8a'],        // 打包架构(真机用 arm64-v8a, 模拟器加 x86_64)
     icon: './build/icon.png',         // 应用图标(建议 512x512 PNG)
