@@ -129,7 +129,7 @@ NODE_MOBILE_PREBUILT_ANDROID_SKIP=1     # 只跳过 Android
 **预编译产物仓库**:
 
 - GitHub:https://github.com/OpenFlun/nodejs-mobile
-- Gitee(国内):https://gitee.com/OpenFlun/nodejs-mobile
+- Gitee(中国):https://gitee.com/OpenFlun/nodejs-mobile
 
 **架构支持(按版本)**:
 

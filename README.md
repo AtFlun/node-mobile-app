@@ -14,6 +14,8 @@
 - **自动识别服务地址**:拦截 `server.js` 里的 `listen()` 调用,动态获取真实协议和端口
 - **失败可见**:5 秒内未启动,加载异常,App 显示错误页并支持展开详情(开发者可查)
 - **增量构建**:文件指纹判断缓存,无变化时 10 秒级重跑
+- **内置镜像探测 + 可自定义**:Gradle 发行版默认走腾讯云,未配置时按腾讯、阿里、官方顺序探测;Maven 仓库默认
+  阿里云 public/google/gradle-plugin 加官方源,两者均可在 `mobileAppConfig.js` 里自定义;
 - **跨平台**:Android(Windows / macOS / Linux)+ iOS(仅 macOS)
 - **离线可用**:`build` 打出的 APK / IPA 内置 JS,无需连电脑也能跑
 - **node_modules 优化(默认开启)**:构建时先交叉编译原生模块,再自动执行六阶段优化--先清空 postinstall 资源(保留 js 供合并),
@@ -154,7 +156,7 @@ npm i -D @flun/node-mobile-app
 ### 快速开始
 
 ```bash
-# 1. 编辑配置:打开 mobileAppConfig.js,改 appId / appName / serverPath 等
+# 1. 编辑配置:打开 mobileAppConfig.js,改必填项 serverPath 或完整自定义;
 
 # 2. 开发调试(需 adb 可连的设备,走 Metro 热更新)
 npx node-mobile-app test
@@ -231,9 +233,28 @@ adb install -r "./out/myapp-1.0.0-release.apk"
 
 ## 参考配置
 
-所有定制集中在这一个文件;**不配置也能跑**(用默认值);
+所有定制集中在这一个文件;`serverPath` 字段值是必填项;
 
-### 必填
+### 入口与标识
+
+- `serverPath`
+  - 类型:`string`
+  - 默认:`'./server.js'`
+  - 说明:Node.js 启动脚本路径,指向的文件必须存在
+- `appId`
+  - 类型:`string`
+  - 默认:`'com.example.app'`
+  - 说明:应用唯一标识(反向域名格式,Android/iOS 通用)
+- `versionCode`
+  - 类型:`int`
+  - 默认:`1`
+  - 说明:内部版本号,必须为正整数
+
+构建前会校验以下项,不满足即报错:用户项目根必须有 `package.json`;`appId` 需为反向域名格式;
+`versionCode` 需为正整数;`android.abiFilters` 不能为空;`android.gradleDistributionUrl` 与
+`android.mavenRepositories` 若配置,格式不合法也会报错(见 Android 章节).
+
+### 应用信息
 
 - `appName`
   - 类型:`string \| null`
@@ -243,35 +264,44 @@ adb install -r "./out/myapp-1.0.0-release.apk"
   - 类型:`string \| null`
   - 默认:`null`
   - 说明:APK / IPA 输出目录(默认 `./out`)
-- `showLoading`
+- `versionName`
+  - 类型:`string`
+  - 默认:`'1.0.0'`
+  - 说明:用户可见版本名(Android versionName / iOS CFBundleShortVersionString)
+
+### WebView
+
+以下字段均位于 `webview` 对象下:
+
+- `webview.showLoading`
   - 类型:`boolean`
   - 默认:`true`
   - 说明:是否显示加载指示器
-- `loadingText`
+- `webview.loadingText`
   - 类型:`string`
   - 默认:`'正在启动服务...'`
   - 说明:加载提示文字
-- `enableJavaScript`
+- `webview.enableJavaScript`
   - 类型:`boolean`
   - 默认:`true`
   - 说明:是否启用 JavaScript
-- `enableDomStorage`
+- `webview.enableDomStorage`
   - 类型:`boolean`
   - 默认:`true`
   - 说明:是否启用 DOM Storage
-- `allowFileAccess`
+- `webview.allowFileAccess`
   - 类型:`boolean`
   - 默认:`true`
   - 说明:是否允许访问本地文件
-- `mixedContentMode`
+- `webview.mixedContentMode`
   - 类型:`string`
   - 默认:`'always'`
   - 说明:混合内容模式:`never` / `always` / `compatibility`
-- `backgroundColor`
+- `webview.backgroundColor`
   - 类型:见下
   - 默认:`'#ffffff'`
   - 说明:WebView 背景色;支持:固定色 `'#ffffff'` / 跟随系统 `'system'` / 深浅两值 `{ light, dark }`
-- `allowSelfSignedCert`
+- `webview.allowSelfSignedCert`
   - 类型:`boolean`
   - 默认:`false`
   - 说明:见下文"HTTPS 自签证书"
@@ -302,6 +332,16 @@ adb install -r "./out/myapp-1.0.0-release.apk"
   - 类型:`string`
   - 默认:`'37.0.0'`
   - 说明:构建工具版本
+- `gradleDistributionUrl`
+  - 类型:`string \| null`
+  - 默认:`null`
+  - 说明:Gradle 发行版的完整下载地址.未配置时按腾讯、阿里、官方顺序探测,三者均不可达则回落官方并警告;
+    已配置时直接使用,失败不回退,并提示可改回 `null` 或换可达地址
+- `mavenRepositories`
+  - 类型:`string[] \| null`
+  - 默认:`null`
+  - 说明:自定义 Maven 仓库数组,同时替换 `settings.gradle` 与根 `build.gradle` 的仓库列表;未配置时保持模板默认
+    (阿里云 `public`/`google`/`gradle-plugin` + 官方 `google`/`mavenCentral`)
 - `abiFilters`
   - 类型:`string[]`
   - 默认:`['arm64-v8a']`
@@ -591,13 +631,27 @@ adb logcat | grep -E "NODEJS-MOBILE|ReactNativeJS"
 ### Q:Android 构建卡在拉取依赖(`react-android` / `hermes-android` 等)?
 
 Android 模板的 `settings.gradle` 与 `build.gradle` 已在 `google()` / `mavenCentral()` 之前插入阿里云镜像,
-国内网络优先走镜像;海外网络镜像不命中会自动回退官方源,不影响功能.
+中国网络优先走镜像;海外网络镜像不命中会自动回退官方源,不影响功能.
 
 若仍卡住:
 
 - 检查镜像可达:浏览器打开 `https://maven.aliyun.com/repository/public` 是否正常;
 - 检查本机 `~/.gradle/init.gradle` 是否有与仓库顺序冲突的配置(如强制替换仓库),有则临时移除以排除干扰;
+- 若所在网络对默认镜像均不友好,可在 `mobileAppConfig.js` 里配置 `android.mavenRepositories` 指定自己的仓库数组,
+  配置后会完全替换模板默认仓库,未配置则保持模板默认;
 - 停掉残留 Daemon 后重试:在 `node-mobile-app-build/android/` 下执行 `gradlew --stop`,再重跑 `test` / `build`.
+
+### Q:Android 构建卡在下载 Gradle 发行版(`gradle-*-bin.zip`)?
+
+Gradle Wrapper 下载发行版走单个 `distributionUrl`,没有多 URL 自动回退机制.默认模板指向腾讯云镜像,
+中国网络可直接使用.若卡住:
+
+- 直接配置完整地址:`android.gradleDistributionUrl` 填一个可达的 `gradle-*-bin.zip` 地址;
+  配置后不再探测,失败不回退,会提示改回 `null` 或换可达地址;
+- 交回自动探测:把 `android.gradleDistributionUrl` 设为 `null`,工具会按腾讯、阿里、官方顺序探测,
+  三者均不可达时回落官方并警告;
+- Wrapper 只对单个 URL 做重试,不会在多个地址间切换;若地址本身不可达,换地址或改回 `null` 走探测才是有效手段;
+- 已下载完成的部分会留在 `~/.gradle/wrapper/dists/` 下,下次构建复用,不会重复下载.
 
 ### Q:Express 版本怎么选?
 
@@ -658,6 +712,6 @@ ISC
 ## 贡献
 
 - 源码:[GitHub](https://github.com/OpenFlun/node-mobile-app)
-- 中国:[gitee](https://gitee.com/OpenFlun/node-mobile-app)
+- 中国镜像:[gitee](https://gitee.com/OpenFlun/node-mobile-app)
 - 问题反馈:[Issues](https://github.com/OpenFlun/node-mobile-app/issues)
 - 主页:[npm 包页面](https://www.npmjs.com/package/@flun/node-mobile-app#readme)

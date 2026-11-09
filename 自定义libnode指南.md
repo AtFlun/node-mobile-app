@@ -40,7 +40,7 @@
 - GitHub
   - 源码仓库:[OpenFlun/nodejs-mobile](https://github.com/OpenFlun/nodejs-mobile)
   - Release 页面:[Releases](https://github.com/OpenFlun/nodejs-mobile/releases)
-- Gitee(国内)
+- Gitee(中国)
   - 源码仓库:[OpenFlun/nodejs-mobile](https://gitee.com/OpenFlun/nodejs-mobile)
   - Release 页面:[Releases](https://gitee.com/OpenFlun/nodejs-mobile/releases)
 
@@ -221,7 +221,7 @@ Start-Sleep -Seconds 5
 ### 3.1 准备源码与 NDK
 
 ```bash
-# 克隆源码(国内推荐 Gitee)
+# 克隆源码(中国推荐 Gitee)
 git clone https://gitee.com/OpenFlun/nodejs-mobile.git
 cd nodejs-mobile
 
