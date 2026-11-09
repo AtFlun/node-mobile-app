@@ -1,8 +1,8 @@
+import chalk from 'chalk';
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import crypto from 'crypto';
 import { ensureDir, removeDir } from './utils.js';
-import chalk from 'chalk';
 
 
 const FINGERPRINT_FILE = '.build-fingerprint.json',

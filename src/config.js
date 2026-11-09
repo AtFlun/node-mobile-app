@@ -1,7 +1,7 @@
-import path from 'path';
-import fs from 'fs';
-import { pathToFileURL } from 'url';
 import chalk from 'chalk';
+import fs from 'fs';
+import path from 'path';
+import { pathToFileURL } from 'url';
 
 const merge = (def, user) => {
   const out = { ...def };

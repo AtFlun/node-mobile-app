@@ -1,6 +1,6 @@
+import chalk from 'chalk';
 import fs from 'fs';
 import path from 'path';
-import chalk from 'chalk';
 import { fileURLToPath } from 'url';
 
 // 要复制的文件位置、目标目录和目标文件路径

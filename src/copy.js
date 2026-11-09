@@ -1,11 +1,11 @@
-import path from 'path';
-import fs from 'fs';
-import {
-  ensureDir, removeDir, readJson, isExcluded, copyFileIfChanged, writeIfChanged, buildEslintConfigSource
-} from './utils.js';
-import { resolveSdkPath } from './config.js';
-import { createRequire } from 'module';
 import chalk from 'chalk';
+import fs from 'fs';
+import { createRequire } from 'module';
+import path from 'path';
+import { resolveSdkPath } from './config.js';
+import {
+  buildEslintConfigSource, copyFileIfChanged, ensureDir, isExcluded, readJson, removeDir, writeIfChanged
+} from './utils.js';
 
 const BUILD_DIR_NAME = 'node-mobile-app-build',
   TEMPLATE_EXCLUDE = [

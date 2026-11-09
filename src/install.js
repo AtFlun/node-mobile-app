@@ -1,11 +1,11 @@
-import path from 'path';
-import fs from 'fs';
-import { run } from './utils.js';
-import { clearVerified, optimizeNodeModules, SELF_HASH } from './optimize-node-modules.js';
-import { createRequire } from 'module';
 import chalk from 'chalk';
-import { resolveSdkPath } from './config.js';
 import { createHash } from 'crypto';
+import fs from 'fs';
+import { createRequire } from 'module';
+import path from 'path';
+import { resolveSdkPath } from './config.js';
+import { clearVerified, optimizeNodeModules, SELF_HASH } from './optimize-node-modules.js';
+import { run } from './utils.js';
 
 const ABI_MAP = {
   'armeabi-v7a': { arch: 'arm', prefix: 'armv7a-linux-androideabi' },

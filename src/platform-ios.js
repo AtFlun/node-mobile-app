@@ -1,7 +1,7 @@
-import { ensureDir, run } from './utils.js';
 import chalk from 'chalk';
 import fs from 'fs';
 import path from 'path';
+import { ensureDir, run } from './utils.js';
 
 /** 应用 Scheme 名称,与 iOS 工程一致 */
 const SCHEME = 'MyApp',

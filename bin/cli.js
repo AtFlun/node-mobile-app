@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import chalk from 'chalk';
-import { runTest } from '../src/commands/test.js';
+import { copyFile } from '../scripts/copy-files.js';
 import { runBuild } from '../src/commands/build.js';
 import { runClean } from '../src/commands/clean.js';
-import { copyFile } from '../scripts/copy-files.js';
+import { runTest } from '../src/commands/test.js';
 
 // 输出用法;
 const printHelp = () => {

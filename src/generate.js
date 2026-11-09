@@ -1,6 +1,6 @@
+import chalk from 'chalk';
 import path from 'path';
 import { writeIfChanged } from './utils.js';
-import chalk from 'chalk';
 
 /**
  * 生成 main.js(桥接代码,用户不需要手写)

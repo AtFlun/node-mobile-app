@@ -19,7 +19,7 @@ import {
 } from '../patcher.js';
 import { checkIosTools, ensureMac, podInstall } from '../platform-ios.js';
 import {
-  ensureDir, spawnCmdAsync, run, runSilent, runStream, findAdb, writeInstallState, ensureInstallable, findHermesc
+  ensureDir, ensureInstallable, findAdb, findHermesc, run, runSilent, runStream, spawnCmdAsync, writeInstallState
 } from '../utils.js';
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
