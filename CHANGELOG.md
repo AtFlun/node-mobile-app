@@ -1,4 +1,13 @@
 # 变更日志
+## [4.2.2] - 2026-11-13 21:29
+### 修复
+- 图标处理依赖由 `jimp` 换为 `sharp`;`jimp@1.6.1` 依赖的 `pngjs@7.0.0` 在 `lib/sync-inflate.js` 用
+  `zlib.Inflate.call(this, opts)` 继承内置类,而现代 Node 中 `zlib.Inflate` 已是严格 class,只能用 `new` 调用,
+  导致 `test` / `build` 在 `[2/11]` 阶段抛 `Class constructor Inflate cannot be invoked without 'new'`;
+  影响 `android.icon` 与 `ios.icon` 的自定义图标处理,未配置图标时不加载 sharp;
+
+### 优化
+- `sharp` 仍按需动态导入,仅在配置了自定义图标时才加载,未配置图标时保持模板默认图标;
 
 ## [4.2.1] - 2026-11-13 20:22
 ### 优化
@@ -16,10 +25,3 @@
 - 删除无调用方的 `readInstallState`,移除 `ensureInstallable` 未使用的 `buildDir` 参数;
 - 模板 `App.tsx`、`.prettierrc.js`、`babel.config.js`、`eslint.config.js`、`metro.config.js` 改为
   `const` 声明加末尾导出;
-
-## [4.1.2] - 2026-11-07 22:27
-### 修复
-- 修复 Android 构建长时间卡在 Gradle 下载的问题;模板 `gradle-wrapper.properties` 的 `distributionUrl`
-  由 `services.gradle.org` 改为腾讯云镜像,中国直连官方源常超时且不报错;
-- 修复 `--debug` 下 Gradle 进度条被拆成大量点与数字的问题;调试模式编译改为 `stdio: 'inherit'`,
-  让进度条直连终端刷新,不再经管道逐块拆分;

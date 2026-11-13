@@ -175,23 +175,20 @@ const patchIcon = async (buildDir, userProjectDir, config) => {
   const iconAbs = path.resolve(userProjectDir, iconPath);
   if (!fs.existsSync(iconAbs)) return console.warn(chalk.yellow('  ⚠️  图标文件不存在,保持默认: ' + iconAbs));
 
-  const { Jimp } = await import('jimp'),
+  const { default: sharp } = await import('sharp'),
     densities = [
       { dir: 'mipmap-mdpi', size: 48 },
       { dir: 'mipmap-hdpi', size: 72 },
       { dir: 'mipmap-xhdpi', size: 96 },
       { dir: 'mipmap-xxhdpi', size: 144 },
       { dir: 'mipmap-xxxhdpi', size: 192 }
-    ], resDir = path.join(buildDir, 'android', 'app', 'src', 'main', 'res'), source = await Jimp.read(iconAbs);
+    ], resDir = path.join(buildDir, 'android', 'app', 'src', 'main', 'res');
 
   for (const { dir, size } of densities) {
     const targetDir = path.join(resDir, dir);
     if (!fs.existsSync(targetDir)) continue;
 
-    const img = source.clone();
-    img.resize({ w: size, h: size });
-    const buf = await img.getBuffer('image/png');
-
+    const buf = await sharp(iconAbs).resize({ width: size, height: size, fit: 'cover' }).png().toBuffer();
     fs.writeFileSync(path.join(targetDir, 'ic_launcher.png'), buf);
     fs.writeFileSync(path.join(targetDir, 'ic_launcher_round.png'), buf);
   }
@@ -308,7 +305,7 @@ const patchIosIcon = async (buildDir, userProjectDir, config) => {
   const iconDir = path.join(buildDir, 'ios', 'MyApp', 'Images.xcassets', 'AppIcon.appiconset');
   if (!fs.existsSync(iconDir)) return;
 
-  const { Jimp } = await import('jimp'), source = await Jimp.read(iconAbs),
+  const { default: sharp } = await import('sharp'),
     // Apple 规范:每项 (idiom, size, scale) 对应的像素尺寸与文件名
     variants = [
       { idiom: 'iphone', size: '20x20', scale: '2x', px: 40, name: 'Icon-App-20x20@2x.png' },
@@ -327,9 +324,7 @@ const patchIosIcon = async (buildDir, userProjectDir, config) => {
     };
 
   for (const v of variants) {
-    const img = source.clone();
-    img.resize({ w: v.px, h: v.px });
-    const buf = await img.getBuffer('image/png');
+    const buf = await sharp(iconAbs).resize({ width: v.px, height: v.px, fit: 'cover' }).png().toBuffer();
     fs.writeFileSync(path.join(iconDir, v.name), buf);
   }
 
