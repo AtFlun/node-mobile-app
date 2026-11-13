@@ -122,6 +122,8 @@
 | Windows 额外 | Visual Studio + Git for Windows(仅编译原生模块时需要,见下方说明) |
 
 **JDK 必须是 17**,Android Gradle Plugin 目前不支持更高版本;
+**`engines.node` 只约束开发机**(驱动构建的 Node),与移动端运行时版本无关;Android / iOS 的运行时由
+`@flun/nodejs-mobile-react-native` 的 `prebuiltAssets.version` 决定,当前支持 Node.js v18,不受开发机 Node 版本限制;
 
 ### 允许安装脚本执行
 
@@ -545,6 +547,7 @@ CLI **自动识别 `server.js` 实际监听的协议和端口**--拦截 `net.Ser
 | 图标尺寸     | 5 个密度(48~192)                                          | 9 个尺寸(40~1024)                        |
 
 **iOS 运行时版本**:iOS 附件的实际运行时版本随适配进度变化,**当前对应 v18.20.4**;如需更高版本,可克隆 [nodejs-mobile
+**注意**:`engines.node` 约束的是开发机;移动端运行时可以是 Node.js v18;
 仓库](https://github.com/OpenFlun/nodejs-mobile) 自行编译 `NodeMobile.xcframework`,流程与 Android 自编译 `libnode.so`
 类似(见 `自定义libnode指南.md`);
 

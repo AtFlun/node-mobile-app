@@ -1,4 +1,13 @@
 # 变更日志
+## [4.2.3] - 2026-11-13 22:06
+### 升级注意事项
+- `engines.node` 由 `>= 18` 收紧为 `>=22.12.0`,与作用域内其它包统一;在 Node 18 / 20 上安装会直接失败;
+- **该要求只约束开发机**(驱动构建的 Node),与移动端运行时无关;Android / iOS 运行时由
+  `@flun/nodejs-mobile-react-native` 的 `prebuiltAssets.version` 决定,当前支持 Node.js v18;
+
+### 文档
+- README「安装前准备」与「Android / iOS 差异」两节补充 `engines.node` 只约束开发机、移动端运行时支持 v18 的说明,
+  避免把该字段误解为"不能编译以 Node 18 为运行时的移动版本";
 ## [4.2.2] - 2026-11-13 21:29
 ### 修复
 - 图标处理依赖由 `jimp` 换为 `sharp`;`jimp@1.6.1` 依赖的 `pngjs@7.0.0` 在 `lib/sync-inflate.js` 用
@@ -12,16 +21,3 @@
 ## [4.2.1] - 2026-11-13 20:22
 ### 优化
 - 整体细节优化;
-
-## [4.2.0] - 2026-11-09 15:33
-### 新增
-- 新增 `android.gradleDistributionUrl` 配置项,可指定 Gradle 发行版的完整下载地址;未配置时按腾讯、阿里、
-  官方顺序探测,三者均不可达则回落官方并警告;已配置时直接使用,失败不回退,并提示可改回 null 或换可达地址;
-- 新增 `android.mavenRepositories` 配置项,可自定义 Maven 仓库数组,同时替换 `settings.gradle` 与根
-  `build.gradle` 的仓库列表;未配置时保持模板默认(阿里云 public/google/gradle-plugin + 官方 google/mavenCentral);
-### 优化
-- 导出函数统一改为独立 `const` 声明并按字母序集中导出,未导出内容仍用逗号链;导出项补全标准 JSDoc;
-- 各文件 import 统一为第三方包在前、相对路径在后、各自字母序,花括号内名字按大小写不敏感字母序;
-- 删除无调用方的 `readInstallState`,移除 `ensureInstallable` 未使用的 `buildDir` 参数;
-- 模板 `App.tsx`、`.prettierrc.js`、`babel.config.js`、`eslint.config.js`、`metro.config.js` 改为
-  `const` 声明加末尾导出;
