@@ -123,11 +123,12 @@ const ABI_MAP = {
           GYP_DEFINES: 'target_arch=' + map.arch + ' v8_target_arch=' + map.arch + ' android_target_arch=' + map.arch +
             ' host_os=' + hostOs + ' OS=android android_ndk_path=' + ndkPath.replace(/\\/g, '/'),
           PATH: [path.join(ndkPath, 'prebuilt', hostTag, 'bin'), path.join(toolchain, 'bin'),
-          path.join(targetDir, 'node_modules', '.bin'), process.env.PATH].filter(Boolean).join(path.delimiter)
+          path.join(targetDir, 'node_modules', '.bin'), process.env.PATH].filter(Boolean).join(path.delimiter),
+          npm_config_build_from_source: 'true'
         };
       console.log(chalk.cyan('  ℹ️  编译原生模块 (' + abi + ')...'));
       try {
-        run('npm', ['rebuild', '--build-from-source', '--no-audit', '--no-fund'], { cwd: targetDir, env, quiet: true });
+        run('npm', ['rebuild', '--no-audit', '--no-fund'], { cwd: targetDir, env, quiet: true });
       }
       catch (e) { console.error(chalk.red('  [错误] 原生模块编译失败 (' + abi + '): ' + e.message)), process.exit(1); }
       const missing = findNativePackages(targetDir).filter(name => {

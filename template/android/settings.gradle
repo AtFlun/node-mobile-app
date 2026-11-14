@@ -9,7 +9,10 @@ pluginManagement {
     includeBuild("../../node_modules/@react-native/gradle-plugin")
 }
 plugins { id("com.facebook.react.settings") }
-extensions.configure(com.facebook.react.ReactSettingsExtension){ ex -> ex.autolinkLibrariesFromCommand() }
+def autolinkScript = file("../../node_modules/@flun/node-mobile-app/scripts/generate-autolinking.js").absolutePath
+extensions.configure(com.facebook.react.ReactSettingsExtension){ ex ->
+    ex.autolinkLibrariesFromCommand(['node', autolinkScript])
+}
 rootProject.name = 'MyApp'
 include ':app'
 includeBuild('../../node_modules/@react-native/gradle-plugin')

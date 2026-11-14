@@ -38,7 +38,8 @@
 │   └── server.js                 # 默认 server 模板(你的项目无 server.js 时复制过去)
 │
 ├── scripts/
-│   └── copy-files.js             # postinstall 钩子:在你的项目根生成 mobileAppConfig.js
+│   ├── copy-files.js             # postinstall 钩子:在你的项目根生成 mobileAppConfig.js
+│   └── generate-autolinking.js   # 生成 autolinking 配置,供 settings.gradle 调用
 │
 ├── src/
 │   ├── config.js                 # 配置加载 + 校验(DEFAULT_CONFIG / loadConfig / validateConfig)
