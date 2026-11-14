@@ -35,14 +35,12 @@
     "LICENSE",
     "mobileAppConfig.js"
   ],
-  "scripts": {
-    "postinstall": "node scripts/copy-files.js"
-  },
+  "scripts": {},
   "dependencies": {
     "@babel/core": "^8.1.2",
     "@eslint-react/eslint-plugin": "^5.30.2",
     "@eslint/js": "^10.0.1",
-    "@flun/nodejs-mobile-react-native": "*",
+    "@flun/nodejs-mobile-react-native": "^2.1.7",
     "@react-native-community/cli": "^21.0.0",
     "@react-native-community/cli-platform-android": "^21.0.0",
     "@react-native-community/cli-platform-ios": "^21.0.0",
