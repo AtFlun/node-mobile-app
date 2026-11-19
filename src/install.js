@@ -85,6 +85,23 @@ const ABI_MAP = {
     }
     return result;
   },
+  /**
+   * 内部:把用户项目中带 binding.gyp 的原生模块自动并入 allowScripts
+   * CLI 自身会触发 npm rebuild 编译原生模块,若这些包不在白名单内,
+   * npm 会拦截其 install 脚本,导致编译被跳过、最终报缺少 .node
+   */
+  mergeNativeAllowScripts = targetDir => {
+    const pkgPath = path.join(targetDir, 'package.json');
+    if (!fs.existsSync(pkgPath)) return [];
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')),
+      allow = (pkg.allowScripts && typeof pkg.allowScripts === 'object') ? pkg.allowScripts : { node: true },
+      added = findNativePackages(targetDir).filter(n => allow[n] !== true);
+    if (added.length === 0) return [];
+    for (const n of added) allow[n] = true;
+    pkg.allowScripts = allow;
+    fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
+    return added;
+  },
   compileNativeModules = (targetDir, userProjectDir, config, buildDir, abiFilters) => {
     const sdkPath = resolveSdkPath(config);
     if (!sdkPath) console.error(chalk.red('  [错误] 未找到 Android SDK,无法编译原生模块')), process.exit(1);
@@ -255,8 +272,11 @@ const installUserDeps = async (targetDir, userProjectDir, config, buildDir, targ
     console.log(chalk.green('    ✓ 用户依赖安装完成'));
   }
 
-  if (hasNative && targetPlatform === 'android' && shouldInstall)
+  if (hasNative && targetPlatform === 'android' && shouldInstall) {
+    const autoAllowed = mergeNativeAllowScripts(targetDir);
+    if (autoAllowed.length > 0) console.log(chalk.gray('    自动允许安装脚本: ' + autoAllowed.join(', ')));
     compileNativeModules(targetDir, userProjectDir, config, buildDir, abiFilters);
+  }
   if (shouldOptimize) {
     console.log(chalk.cyan('  [信息] 正在执行优化...'));
     try {

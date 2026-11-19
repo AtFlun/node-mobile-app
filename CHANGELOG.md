@@ -1,4 +1,13 @@
 # 变更日志
+## [4.2.5] - 2026-11-19 11:26
+### 修复
+- 编译原生模块前自动放行其安装脚本:新增 `mergeNativeAllowScripts`,`[5/11]` 在 `npm install` 完成后、
+  `npm rebuild` 之前,扫描用户项目 `node_modules` 中带 `binding.gyp` 的包,并入
+  `nodejs-assets/nodejs-project/package.json` 的 `allowScripts`;此前白名单只取自 `mobileAppConfig.js`,
+  未声明的原生模块(如 `bufferutil`)其 install 脚本会被 npm 拦截,`npm rebuild` 静默跳过编译,
+  最终报「以下原生模块编译后缺少 .node」;
+- 仅在确有新增时回写该 `package.json`,并打印「自动允许安装脚本: <包名>」;已在配置中声明的包不重复改写;
+
 ## [4.2.4] - 2026-11-14 09:29
 ### 适配
 - 适配 npm 12:该版本起不再把未知 CLI flag 透传为 `npm_config_*` 环境变量,而是直接报
@@ -27,12 +36,3 @@
 ### 文档
 - README「安装前准备」与「Android / iOS 差异」两节补充 `engines.node` 只约束开发机、移动端运行时支持 v18 的说明,
   避免把该字段误解为"不能编译以 Node 18 为运行时的移动版本";
-## [4.2.2] - 2026-11-13 21:29
-### 修复
-- 图标处理依赖由 `jimp` 换为 `sharp`;`jimp@1.6.1` 依赖的 `pngjs@7.0.0` 在 `lib/sync-inflate.js` 用
-  `zlib.Inflate.call(this, opts)` 继承内置类,而现代 Node 中 `zlib.Inflate` 已是严格 class,只能用 `new` 调用,
-  导致 `test` / `build` 在 `[2/11]` 阶段抛 `Class constructor Inflate cannot be invoked without 'new'`;
-  影响 `android.icon` 与 `ios.icon` 的自定义图标处理,未配置图标时不加载 sharp;
-
-### 优化
-- `sharp` 仍按需动态导入,仅在配置了自定义图标时才加载,未配置图标时保持模板默认图标;
