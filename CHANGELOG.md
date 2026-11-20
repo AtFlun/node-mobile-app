@@ -1,5 +1,10 @@
 # 变更日志
 
+## [4.3.1] - 2026-11-20 11:50
+### 修复
+- `test` 命令在 Windows 上首次运行常报「Metro 30 秒内未就绪」:此前用 `spawnCmdAsync('npx', ['react-native', 'start'])` 后台拉起 Metro,`npx` 经 `cmd.exe` 运行时,清理旧 Metro 的 Ctrl+C 偶发被新批处理接收,`cmd.exe` 弹出「终止批处理操作吗(Y/N)?」且无 stdin 应答而永久挂起,导致 Metro 起不来、30 秒超时回落本地 bundle,且不再出现后台窗口;
+- 改用 `cmd.exe /c start "" /b npx react-native start` 并加 `windowsHide: true`,`/b` 使子进程忽略 Ctrl+C、不新建窗口,一处同时消除「Y/N 挂死」与「窗口消失」;连跑两次验证首次即「✓ Metro 已就绪(后台常驻,支持热更新)」,第二次正确复用常驻 Metro;
+
 ## [4.3.0] - 2026-11-20 10:43
 ### 更新
 - 编译支持 node v24.19.0 并设置为默认;
@@ -14,22 +19,3 @@
   未声明的原生模块(如 `bufferutil`)其 install 脚本会被 npm 拦截,`npm rebuild` 静默跳过编译,
   最终报「以下原生模块编译后缺少 .node」;
 - 仅在确有新增时回写该 `package.json`,并打印「自动允许安装脚本: <包名>」;已在配置中声明的包不重复改写;
-
-## [4.2.4] - 2026-11-14 09:29
-### 适配
-- 适配 npm 12:该版本起不再把未知 CLI flag 透传为 `npm_config_*` 环境变量,而是直接报
-  `EUNKNOWNCONFIG Unknown cli flag: --build-from-source`;`src/install.js` 中
-  `npm rebuild --build-from-source` 改为环境变量 `npm_config_build_from_source: 'true'`,强制从源码编译的行为不变;
-- 适配 Node.js 预发布版本:`@react-native-community/cli/build/bin.js` 用
-  `semver.satisfies(process.version, '>=18')` 做版本门,预发布版本(如 `v27.0.0-alpha`)按 semver 规则不满足稳定区间,
-  CLI 仅向 stderr 打一行提示就退出,stdout 为空,导致 Gradle 的 `generateAutolinkingPackageList` 读到 0 字节
-  `autolinking.json` 后报错;
-
-### 修复
-- 新增 `scripts/generate-autolinking.js`,直接调用 `@react-native-community/cli-config` 的编程 API 生成
-  autolinking 配置,绕开上述版本门;`template/android/settings.gradle` 改为
-  `autolinkLibrariesFromCommand(['node', autolinkScript])` 指向该脚本,不再走 `npx`;
-- 图标处理依赖由 `jimp` 换为 `sharp`;`jimp@1.6.1` 依赖的 `pngjs@7.0.0` 在 `lib/sync-inflate.js` 用
-  `zlib.Inflate.call(this, opts)` 做 ES5 式继承,现代 Node 中 `zlib.Inflate` 是严格 class,只能 `new`,
-  导致 `test` / `build` 在 `[2/11]` 抛 `Class constructor Inflate cannot be invoked without 'new'`;
-- `sharp` 按需动态导入,仅在配置了自定义图标时才加载;未配置图标时保持模板默认图标;

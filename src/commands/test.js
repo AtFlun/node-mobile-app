@@ -130,8 +130,8 @@ const runTest = async flags => {
     if (!await metroReady()) {
       console.log(chalk.gray('  启动 Metro...'));
       const metroLog = fs.openSync(path.join(buildDir, '.metro.log'), 'a'),
-        metro = spawnCmdAsync('npx', ['react-native', 'start'], {
-          cwd: buildDir, detached: true, stdio: ['ignore', metroLog, metroLog]
+        metro = spawnCmdAsync('cmd.exe', ['/c', 'start "" /b npx react-native start'], {
+          cwd: buildDir, detached: true, stdio: ['ignore', metroLog, metroLog], windowsHide: true
         });
       metro.unref();
       let ready = false;
