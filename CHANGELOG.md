@@ -1,4 +1,11 @@
 # 变更日志
+
+## [4.3.0] - 2026-11-20 10:43
+### 更新
+- 编译支持 node v24.19.0 并设置为默认;
+
+***!!! 注意***: 1. Node.js 24 的官方头文件依赖 C++20 特性; 2. ios端还是只能用v18.20.4;
+
 ## [4.2.5] - 2026-11-19 11:26
 ### 修复
 - 编译原生模块前自动放行其安装脚本:新增 `mergeNativeAllowScripts`,`[5/11]` 在 `npm install` 完成后、
@@ -26,13 +33,3 @@
   `zlib.Inflate.call(this, opts)` 做 ES5 式继承,现代 Node 中 `zlib.Inflate` 是严格 class,只能 `new`,
   导致 `test` / `build` 在 `[2/11]` 抛 `Class constructor Inflate cannot be invoked without 'new'`;
 - `sharp` 按需动态导入,仅在配置了自定义图标时才加载;未配置图标时保持模板默认图标;
-
-## [4.2.3] - 2026-11-13 22:06
-### 升级注意事项
-- `engines.node` 由 `>= 18` 收紧为 `>=22.12.0`,与作用域内其它包统一;在 Node 18 / 20 上安装会直接失败;
-- **该要求只约束开发机**(驱动构建的 Node),与移动端运行时无关;Android / iOS 运行时由
-  `@flun/nodejs-mobile-react-native` 的 `prebuiltAssets.version` 决定,当前支持 Node.js v18;
-
-### 文档
-- README「安装前准备」与「Android / iOS 差异」两节补充 `engines.node` 只约束开发机、移动端运行时支持 v18 的说明,
-  避免把该字段误解为"不能编译以 Node 18 为运行时的移动版本";
