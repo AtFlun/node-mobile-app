@@ -274,7 +274,8 @@ const installUserDeps = async (targetDir, userProjectDir, config, buildDir, targ
 
   if (hasNative && targetPlatform === 'android' && shouldInstall) {
     const autoAllowed = mergeNativeAllowScripts(targetDir);
-    if (autoAllowed.length > 0) console.log(chalk.gray('    自动允许安装脚本: ' + autoAllowed.join(', ')));
+    if (autoAllowed.length > 0)
+      console.log(chalk.green('    原生模块[' + autoAllowed.join(', ') + ']无条件加入allowScripts白名单'));
     compileNativeModules(targetDir, userProjectDir, config, buildDir, abiFilters);
   }
   if (shouldOptimize) {
