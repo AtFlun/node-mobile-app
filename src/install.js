@@ -72,16 +72,8 @@ const ABI_MAP = {
     if (!fs.existsSync(nm)) return result;
     for (const entry of fs.readdirSync(nm)) {
       if (entry.startsWith('.')) continue;
-      const full = path.join(nm, entry);
-      if (!fs.statSync(full).isDirectory()) continue;
-      if (entry.startsWith('@')) {
-        for (const sub of fs.readdirSync(full)) {
-          const pkgDir = path.join(full, sub);
-          if (fs.statSync(pkgDir).isDirectory() && fs.existsSync(path.join(pkgDir, 'binding.gyp')))
-            result.push(entry + '/' + sub);
-        }
-      }
-      else if (fs.existsSync(path.join(full, 'binding.gyp'))) result.push(entry);
+      const names = entry.startsWith('@') ? fs.readdirSync(path.join(nm, entry)).map(s => entry + '/' + s) : [entry];
+      for (const n of names) if (fs.existsSync(path.join(nm, n, 'binding.gyp'))) result.push(n);
     }
     return result;
   },
